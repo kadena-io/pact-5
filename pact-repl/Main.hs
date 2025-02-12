@@ -21,6 +21,8 @@ import Pact.Core.Command.Crypto
 import Pact.Core.Command.Server
 import Pact.Core.Command.Util
 import Pact.Core.Repl.Compile
+import Pact.Core.Environment
+import Pact.Core.Pretty
 import System.IO
 import qualified Pact.Core.Version as PI
 import System.Directory
@@ -129,7 +131,13 @@ main = O.execParser argParser >>= \case
       (Left pe, state) -> do
         let renderedError = renderLocatedPactErrorFromState state pe
         exitFailureWithMessage ((T.unpack renderedError) <> "\nLoad failed")
-      (Right _, _) -> exitSuccessWithMessage "Load successful"
+      (Right _, state) -> do
+        let testResults = filter (\rs -> _trResult rs /= ReplTestPassed) $ reverse (_replTestResults state)
+        case testResults of
+          [] -> exitSuccessWithMessage "Load successful"
+          (vsep . fmap pretty -> results) -> do
+            T.putStrLn $ renderCompactText' results
+            exitFailureWithMessage "Load failed"
     printVersion = putStrLn ("pact version " <> showVersion PI.version)
     printBuiltins = traverse_ (\bi -> T.putStrLn $ "\"" <> bi <> "\"") replCoreBuiltinNames
 
