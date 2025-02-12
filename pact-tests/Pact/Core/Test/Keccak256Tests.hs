@@ -12,7 +12,6 @@ import Pact.Core.Crypto.Base64 (decodeBase64UrlUnpadded, encodeBase64UrlUnpadded
 import Pact.Core.Crypto.Hash.Keccak256 (keccak256)
 import Test.Tasty
 import Test.Tasty.HUnit
--- import Test.Hspec (Spec, describe, it, shouldBe)
 
 data Reference = Reference
   { input :: Text
