@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 
 
@@ -26,7 +27,9 @@ module Pact.Core.Environment.Utils
 
 import Control.Lens
 import Data.IORef
-import Data.Foldable
+#if __GLASGOW_HASKELL__ < 910
+import Data.Foldable(foldl')
+#endif
 import Control.Applicative((<|>))
 import Control.Monad.Except
 import Control.Monad.Reader hiding (MonadIO(..))
