@@ -968,7 +968,7 @@ replBuiltinMap =
   M.fromList $
     [ (txtRepr, b)
     | b <- [minBound .. maxBound]
-    , b `notElem` (RBuiltinWrap <$> coreBuiltinOverloads)
+    , b `notElem` replBuiltinOverloads
     , let !txtRepr = replCoreBuiltinToText b]
 
 -- | A map from raw text name of a builtin

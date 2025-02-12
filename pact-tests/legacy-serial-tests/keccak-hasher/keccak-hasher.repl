@@ -1,0 +1,13 @@
+;  The legacy module being loaded is this:
+;  (module keccak-hasher g
+;    (defcap g () true)
+
+;    (defun hash-str (s:string)
+;      (hash-keccak256 [(base64-encode s)])
+;    )
+;    )
+(expect
+  "keccak hasher works on empty string"
+  "xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e_rYBF2FpHA"
+  (keccak-hasher.hash-str "")
+  )

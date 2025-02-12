@@ -26,7 +26,6 @@ module Pact.Core.Evaluate
   , evalInterpreter
   , EvalInput
   , EnableGasLogs(..)
-  , versionedNatives
   ) where
 
 import Control.Lens
@@ -34,7 +33,6 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Exception.Safe
 import Data.ByteString (ByteString)
-import Data.Foldable(foldl')
 import Data.Maybe (fromMaybe)
 import Data.Default
 import Data.Map.Strict(Map)
@@ -158,15 +156,6 @@ data EvalResult = EvalResult
 
 type Info = LineInfo
 
-versionedNatives :: Set ExecutionFlag -> Map T.Text CoreBuiltin
-versionedNatives ec =
-  disablePactNatives FlagDisablePact51 pact51Natives coreBuiltinMap
-  where
-  disablePactNatives flag natives =
-    if S.member flag ec then
-      flip (foldl' (\m' k -> M.delete (coreBuiltinToText k) m')) natives
-    else id
-  pact51Natives = [CoreHashPoseidon, CoreHashKeccak256]
 
 
 setupEvalEnv
