@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -443,7 +441,11 @@ desugarLispTerm = \case
   Lisp.Object fields i ->
     ObjectLit <$> (traverse._2) desugarLispTerm fields <*> pure i
   where
-  binderToLet i (Lisp.Binder n mty expr) term = do
+  -- Todo: because previously `Binder`s did not carry variable loc info, we used to use the info
+  -- from the enclosing `Let`. We should use the info from the `MArg` now in the binder, but
+  -- this would actually impact serialization and cause a fork, so unless we decide this is even worth it
+  -- to fork, this will just remain a quirk
+  binderToLet i (Lisp.Binder (Lisp.MArg n mty _) expr) term = do
     expr' <- desugarLispTerm expr
     pure $ Let (Arg n mty i) expr' term i
 
