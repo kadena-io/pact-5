@@ -71,6 +71,42 @@ import qualified Pact.Core.IR.Eval.CEK.Evaluator as CEK
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.IR.Eval.Direct.ReplBuiltin as Direct
 
+import System.Directory (doesDirectoryExist, listDirectory)
+import qualified Data.Set as S
+
+-- | Recursively retrieve all files (not directories) starting from a given directory.
+_getAllPactFilesRecursive :: FilePath -> IO [FilePath]
+_getAllPactFilesRecursive dir = do
+  entries <- listDirectory dir
+  paths <- forM entries $ \entry -> do
+    let fullPath = dir </> entry
+    isDir <- doesDirectoryExist fullPath
+    if isDir
+      then _getAllPactFilesRecursive fullPath  -- Recurse into the subdirectory
+      else if takeExtension fullPath == ".pact" then
+        return [fullPath]
+        else return []
+  return (concat paths)
+
+_checkCorpus :: String -> IO ()
+_checkCorpus corpusPath = do
+  files <- _getAllPactFilesRecursive corpusPath
+  lexParseFailures <- newIORef S.empty
+  shadowingFailures <- newIORef S.empty
+  forM_ files $ \file -> do
+    contents <- T.readFile file
+    case (Lisp.lexer >=> Lisp.parseProgram) contents of
+      Left _ -> modifyIORef' lexParseFailures (S.insert (T.pack file))
+      Right ps -> case traverse_ (runShadowsM coreBuiltinMap . checkTopLevelShadows) ps of
+        Right _ -> pure ()
+        Left _ -> modifyIORef' shadowingFailures (S.insert (T.pack file))
+  lexParseErrors <- T.unlines .  S.toList <$> readIORef lexParseFailures
+  shadowedFiles <- T.unlines . S.toList <$> readIORef shadowingFailures
+  let out = T.concat ["[Parse failures]:\n", lexParseErrors, "\n[Shadowing Failures]", shadowedFiles]
+  T.writeFile "shadowing_report.txt" out
+
+
+
 type ReplInterpreter = Interpreter ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 
 -- Small internal debugging function for playing with file loading within
