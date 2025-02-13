@@ -52,6 +52,7 @@ data ReplOpts
   | OServer FilePath
   -- Crypto
   | OGenKey
+  | OCheckNativeShadowing FilePath
   deriving (Eq, Show)
 
 replOpts :: O.Parser (Maybe ReplOpts)
@@ -61,8 +62,10 @@ replOpts = O.optional $
   <|> O.flag' OLanguageServer (O.long "lsp" <> O.help "Start Language Server")
   <|> apiReqFlag
   <|> unsignedReqFlag
+  <|> O.flag' OGenKey (O.short 'g' <> O.long "genkey" <> O.help "Generate ED25519 keypair")
   <|> loadFlag
   <|> OServer <$> O.strOption (O.metavar "CONFIG" <> O.short 's' <> O.long "server" <> O.help "Run Pact-Server")
+  <|> checkNativeShadowingFlag
 
 -- Todo: trace output and coverage?
 loadFlag :: O.Parser ReplOpts
@@ -78,6 +81,11 @@ loadFlag = fmap OLoad $
     <*> O.argument O.str
       (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")
 
+checkNativeShadowingFlag :: O.Parser ReplOpts
+checkNativeShadowingFlag =
+  OCheckNativeShadowing
+    <$> O.strOption(O.metavar "FILE" <> O.long "check-shadowing" <> O.help "Run a native shadowing check over a particular .pact or .repl file")
+ 
 argParser :: O.ParserInfo (Maybe ReplOpts)
 argParser = O.info (O.helper <*> replOpts)
             (O.fullDesc <> O.header "The Pact Smart Contract Language Interpreter")
@@ -126,6 +134,7 @@ main = O.execParser argParser >>= \case
     OServer configPath -> Y.decodeFileEither configPath >>= \case
       Left perr -> putStrLn $ Y.prettyPrintParseException perr
       Right config -> runServer config noSPVSupport
+    OCheckNativeShadowing fp -> checkParsedShadows fp
   where
     runScript f dolog = execScript dolog f >>= \case
       (Left pe, state) -> do
