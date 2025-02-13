@@ -22,6 +22,7 @@ module Pact.Core.Repl.Compile
  , defaultLoadFile
  , mkReplState
  , mkReplState'
+ , checkParsedShadows
  ) where
 
 import Control.Lens
@@ -253,6 +254,36 @@ mangleFilePath fp = do
       | takeFileName currFile == currFile -> pure fp
       | otherwise -> pure $ combine (takeDirectory currFile) fp
 
+checkParsedShadows :: FilePath -> IO ()
+checkParsedShadows fp = do
+  source <- T.readFile fp
+  case Lisp.lexer source >>= Lisp.parseReplProgram of
+    Left err -> do
+      let errorLoc = view peInfo err
+          msg = pretty errorLoc <> ":" <+> pretty err
+      T.putStrLn (renderCompactText' msg)
+    Right program -> do
+      let (_, reverse -> shadows) = runShadowsM replBuiltinMap (traverse checkReplTopLevelShadows program)
+      case shadows of
+        [] -> pure ()
+        _ -> do
+          let shadowOutput = vsep $ fmap (\s@(Shadows _ _ i) -> pretty i <> ":" <+> pretty s) shadows
+          T.putStrLn $ renderCompactText' shadowOutput
+
+
+liftShadowsReplM :: ShadowsM b FileLocSpanInfo a -> ReplM b a
+liftShadowsReplM act = do
+  natives <- viewEvalEnv eeNatives
+  let (a, shadows) = runShadowsM natives act
+  case reverse shadows of
+    [] -> pure a
+    h:rest -> do
+      traverse_ printShadow (h:rest)
+      throwError $ toShadowingError h
+  where
+  printShadow s@(Shadows _ _ i) = replPrintLn i s
+  toShadowingError (Shadows _ arg i) = PEDesugarError (InvalidNativeShadowing arg) i
+
 interpretReplProgram
   :: ReplInterpreter
   -> SourceCode
@@ -263,7 +294,7 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ bimap (fmap toFileLoc) ((fmap.fmap) toFileLoc) (parseSource lexx)
   setBuiltinResolution sc
-  traverse_ (liftShadowsMEvalM . checkReplTopLevelShadows) parsed
+  traverse_ (liftShadowsReplM . checkReplTopLevelShadows) parsed
   traverse pipe' parsed
   where
   renderDoc info doc = liftIO (renderBuiltinDoc doc) >>= \case
