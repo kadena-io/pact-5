@@ -24,4 +24,5 @@
 {"conName":"DuplicateDefinition","conIndex":"17"}
 {"conName":"InvalidBlessedHash","conIndex":"18"}
 {"conName":"InvalidNativeShadowing","conIndex":"19"}
+{"conName":"InvalidManagerFun","conIndex":"1a"}
 
