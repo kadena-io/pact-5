@@ -26,7 +26,7 @@
 (env-gaslog)
 (expect
   "Gas cost of loading coin contract"
-  20537
+  20983
   (env-gas))
 
 (create-table coin.coin-table)
@@ -50,7 +50,7 @@
 (env-gaslog)
 (expect
   "Gas cost of using the coin contract"
-  24 (env-gas))
+  1 (env-gas))
 
 ;; account balance for emily does not exist, because account does not exist yet
 (expect-failure

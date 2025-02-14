@@ -1,0 +1,100 @@
+(begin-tx)
+(interface barbar
+  (defconst FOO_CONST:integer 1)
+  (defconst FOO_CONST420:integer 420)
+  )
+(commit-tx)
+
+(begin-tx)
+(module foo g
+  (defcap g () true)
+  (defun calls-foo () barbar.FOO_CONST)
+  )
+(commit-tx)
+
+(begin-tx)
+(module bar g
+  (defcap g () true)
+  (defun calls-bar () (foo.calls-foo))
+)
+(commit-tx)
+
+(begin-tx)
+(module baz g
+  (defcap g () true)
+  (defun calls-baz () (bar.calls-bar))
+)
+(commit-tx)
+
+(begin-tx)
+(expect "calls-baz succeeds" 1 (baz.calls-baz))
+(commit-tx)
+
+(begin-tx)
+(module foo g
+  (defcap g () true)
+  (defun calls-foo (sender:string amount:integer)
+    (with-capability (FOO_MANAGED sender amount)
+      (with-capability (FOO_CAP)
+        (foo-pact)
+        barbar.FOO_CONST
+      )
+    )
+  )
+  (defcap FOO_CAP () true)
+
+  (defun foo-mgr (a:integer b:integer) (+ a b))
+
+  (defcap FOO_MANAGED (sender:string a:integer)
+    @managed a foo-mgr
+    true
+  )
+
+  (defpact foo-pact ()
+    (step-with-rollback
+      barbar.FOO_CONST420
+      barbar.FOO_CONST
+      )
+    (step
+      barbar.FOO_CONST420
+      )
+  )
+  )
+
+(install-capability (foo.FOO_MANAGED "edmund" 100))
+(expect
+  "calls foo works within declaring tx"
+  1
+  (calls-foo "edmund" 100))
+(commit-tx)
+
+(begin-tx)
+(use foo)
+(install-capability (foo.FOO_MANAGED "edmund" 100))
+(expect
+  "calls foo works within fresh tx"
+  1
+  (calls-foo "edmund" 100))
+
+(commit-tx)
+
+(begin-tx)
+(module bar g
+  (defcap g () true)
+  (defun calls-bar ()
+    (install-capability (foo.FOO_MANAGED "bob" 100))
+    (foo.calls-foo "bob" 100)
+  )
+)
+(commit-tx)
+
+(begin-tx)
+(module baz g
+  (defcap g () true)
+  (defun calls-baz () (bar.calls-bar))
+)
+(commit-tx)
+
+(begin-tx)
+(expect "calls-baz succeeds" 1 (baz.calls-baz))
+(commit-tx)

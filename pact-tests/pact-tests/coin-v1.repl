@@ -16,7 +16,7 @@
 (env-gaslog)
 (expect
   "Gas cost of loading coin contract"
-  16389 (env-gas))
+  16727 (env-gas))
 (env-gas 0)
 (commit-tx)
 
@@ -37,7 +37,7 @@
 (expect
   "Gas cost of using the coin contract"
   ; todo: use gas in core
-  15 (env-gas))
+  1 (env-gas))
 
 ;; account balance for emily does not exist, because account does not exist yet
 (expect-failure

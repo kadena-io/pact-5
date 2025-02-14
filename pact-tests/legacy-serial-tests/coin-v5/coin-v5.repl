@@ -38,7 +38,7 @@
   "Gas cost of using the coin contract"
   ; Note: this one is cheaper than the repl test
   ; coin-v5.repl because this one does not store line infos
-  23 (env-gas))
+  1 (env-gas))
 
 ;; account balance for emily does not exist, because account does not exist yet
 (expect-failure

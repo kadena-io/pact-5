@@ -10,7 +10,6 @@ import Control.Lens
 import Control.Monad(when)
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Data.Default
 import Data.Text(Text)
 import Data.Maybe(fromMaybe)
 import Data.Either (partitionEithers)
@@ -372,18 +371,6 @@ begin' info mt = do
   mTxId <- liftGasM info (_pdbBeginTx pdb mode)
   replTx .== ((,mt) <$> mTxId)
   return ((,mt) <$> mTxId)
-
-emptyTxState :: ReplM b ()
-emptyTxState = do
-  fqdefs <- use (esLoaded . loAllLoaded)
-  cs <- use esStack
-  esc <- use esCheckRecursion
-  let newEvalState =
-        set esStack cs
-        $ set (esLoaded . loAllLoaded) fqdefs
-        $ set esCheckRecursion esc def
-  put newEvalState
-
 
 commitTx :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 commitTx info b cont handler _env = \case
