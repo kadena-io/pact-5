@@ -66,6 +66,7 @@ module Pact.Core.Names
  , parseQualifiedName
  , parseFullyQualifiedName
  , fullyQualNameParser
+ , nameToFullyQualifiedName
  , VerifierName(..)
  , renderTableName
  , jsonSafeRenderTableName
@@ -563,6 +564,11 @@ renderDefPactId (DefPactId t) = t
 renderParsedTyName :: ParsedTyName -> Text
 renderParsedTyName (TBN (BareName n)) = n
 renderParsedTyName (TQN qn) = renderQualName qn
+
+nameToFullyQualifiedName :: Name -> Maybe FullyQualifiedName
+nameToFullyQualifiedName (Name n tl) = case tl of
+  NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
+  _ -> Nothing
 
 newtype VerifierName = VerifierName Text
   deriving newtype (J.Encode, NFData, Eq, Show, Ord, FromJSON)

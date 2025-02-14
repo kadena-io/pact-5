@@ -83,7 +83,7 @@ gasGoldenTestsWithFlags flags natives interp = do
   let enabledNatives = S.fromList $ fmap lookupFileNameOp $ M.keys $ versionedNatives flags
   let filteredTestsToRun = filter ((`S.member` enabledNatives) . fst) natives
   gasOutputs <- forM filteredTestsToRun $ \(fn, fp) -> do
-    mGas <- runGasTest (gasTestDir </> fp) interp
+    mGas <- runGasTest flags (gasTestDir </> fp) interp
     case mGas of
       Nothing -> fail $ "Could not execute the gas tests for: " <> show fp
       Just (MilliGas consumed) -> pure $ BS.fromStrict $ T.encodeUtf8 (lookupOp fn <> ": " <> T.pack (show consumed))
@@ -116,12 +116,13 @@ opToFileName = M.fromList
 fileNameToOp :: M.Map Text Text
 fileNameToOp = M.fromList [(v,k) | (k, v) <- M.toList opToFileName]
 
-runGasTest :: FilePath -> ReplInterpreter -> IO (Maybe MilliGas)
-runGasTest file interpret = do
+runGasTest :: S.Set ExecutionFlag -> FilePath -> ReplInterpreter -> IO (Maybe MilliGas)
+runGasTest flags file interpret = do
   src <- T.readFile file
   pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   ee <- defaultEvalEnv pdb replBuiltinMap
   let ee' = ee & eeGasEnv . geGasModel .~ replTableGasModel (Just (maxBound :: MilliGasLimit))
+               & eeFlags .~ flags
       gasRef = ee' ^. eeGasEnv . geGasRef
   let source = SourceCode file src
   let rstate = mkReplState ee' (const (const (pure ()))) (\f r -> void (loadFile interpret f r)) & replCurrSource .~ source

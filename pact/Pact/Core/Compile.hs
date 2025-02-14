@@ -21,6 +21,7 @@ module Pact.Core.Compile
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.State.Strict
 import Data.Text(Text)
 import Data.Maybe(mapMaybe)
 import Codec.Serialise(Serialise)
@@ -44,13 +45,14 @@ import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Interpreter
+import Pact.Core.Gas
+import Pact.Core.SizeOf
+import Pact.Core.TransitiveDependencies
 import Pact.Core.Serialise.CBOR_V1(SerialiseV1)
 
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
 import qualified Pact.Core.Syntax.ParseTree as Lisp
-import Pact.Core.Gas
-import Pact.Core.SizeOf
 
 type HasCompileEnv b i
   = ( DesugarBuiltin b
@@ -184,6 +186,7 @@ interpretTopLevel interpreter code tl = do
   debugPrint DPDesugar ds
   evalTopLevel interpreter code tlFinal deps
 
+
 evalTopLevel
   :: forall e b i
   .  (HasCompileEnv b i)
@@ -208,16 +211,27 @@ evalTopLevel interpreter (RawCode code) tlFinal deps = do
       -- busted somehow, this means we won't find out, and
       -- can't fix it later.
         CapGov _ -> pure ()
-      let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
-          mdata = ModuleData m deps'
+      -- Write sliced modules to the pact db
+      evalWrite (_mInfo m) pdb Write DModuleSource (getHashedModuleName m) (ModuleCode code)
+
+      -- Get all of the _new_ dependencies (that is, members of the deployed module)
+      let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
+          newLoaded = M.fromList fqDeps
+
+      -- Add the new dependencies into `loAllLoaded`
+      -- NOTE: it is critical that this happens _before_ `getAllTransitiveDependencies`, because the initial
+      -- working set uses `lookupFqNameOrFail` and it _will_ lookup these deps
+      esLoaded . loAllLoaded %= M.union newLoaded
+
+      -- Get all transitive dependencies for a particular module to include in the dependency set
+      moduleDeps <- getAllTransitiveDependencies (_mInfo m) deps m
+
+      let mdata = ModuleData m moduleDeps
       mSize <- sizeOf (_mInfo m) SizeOfV0 mdata
       chargeGasArgs (_mInfo m) (GWrite mSize)
       evalWrite (_mInfo m) pdb Write DModules (view mName m) mdata
-      -- Write sliced modules to the pact db
-      evalWrite (_mInfo m) pdb Write DModuleSource (getHashedModuleName m) (ModuleCode code)
-      let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
-          newLoaded = M.fromList fqDeps
-          newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_mName m) d))) <$> fqDeps
+      -- Get all
+      let newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_mName m) d))) <$> fqDeps
           loadNewModule =
             over loModules (M.insert (_mName m) mdata) .
             over loAllLoaded (M.union newLoaded) .
@@ -225,6 +239,7 @@ evalTopLevel interpreter (RawCode code) tlFinal deps = do
       esLoaded %= loadNewModule
       esCaps . csModuleAdmin %= S.union (S.singleton (_mName m))
       pure (LoadedModule (_mName m) (_mHash m))
+
     TLInterface iface -> do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
