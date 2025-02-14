@@ -21,7 +21,6 @@ module Pact.Core.Compile
 
 import Control.Lens
 import Control.Monad
-import Control.Monad.State.Strict
 import Data.Text(Text)
 import Data.Maybe(mapMaybe)
 import Codec.Serialise(Serialise)

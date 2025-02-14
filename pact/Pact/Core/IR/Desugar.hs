@@ -59,6 +59,7 @@ import Pact.Core.Persistence hiding (loaded)
 import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.IR.Term
+import Pact.Core.IR.Eval.Runtime.Utils
 import Pact.Core.Guards
 import Pact.Core.Imports
 import Pact.Core.Environment
@@ -1237,8 +1238,10 @@ resolveMeta _ DefEvent = pure DefEvent
 resolveMeta _ Unmanaged = pure Unmanaged
 resolveMeta _ (DefManaged AutoManagedMeta) = pure (DefManaged AutoManagedMeta)
 resolveMeta info (DefManaged (DefManagedMeta i (FQParsed pn))) = do
-  (name', _) <- resolveName info pn
+  (name', dk) <- resolveName info pn
   fqn <- expectedFree info name'
+  lift $ unlessExecutionFlagSet FlagDisablePact51 $ when (dk /= Just DKDefun) $
+    throwError $ PEDesugarError (InvalidManagerFun (fqnToQualName fqn)) info
   pure (DefManaged (DefManagedMeta i (FQName fqn)))
 
 expectedFree
