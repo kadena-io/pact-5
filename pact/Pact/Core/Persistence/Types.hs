@@ -31,6 +31,7 @@ module Pact.Core.Persistence.Types
  , ExecutionMode(..)
  , mdModuleName
  , mdModuleHash
+ , mdDependencies
  , GuardTableOp(..)
  , TxId(..)
  , TxLog(..)
@@ -91,6 +92,13 @@ mdModuleHash f = \case
     mHash f ev <&> \ev' -> ModuleData ev' deps
   InterfaceData iface deps ->
     ifHash f iface <&> \ev' -> InterfaceData ev' deps
+
+mdDependencies :: Lens' (ModuleData b i) (Map FullyQualifiedName (EvalDef b i))
+mdDependencies f = \case
+  ModuleData ev deps ->
+    ModuleData ev <$> f deps
+  InterfaceData iface deps ->
+    InterfaceData iface <$> f deps
 
 -- | Data reflecting Key/Value storage in user-tables.
 newtype RowData

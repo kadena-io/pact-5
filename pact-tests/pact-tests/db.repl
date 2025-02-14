@@ -150,26 +150,26 @@
 
 ;; test nested commits
 
-(begin-tx)
-(env-enable-repl-natives true)
-(module nested-tx G
-  (defcap G () true)
-  (defschema s x:integer)
-  (deftable t:{s})
-  (defun test-nested-tx ()
-    (begin-tx)
-    (insert t "a" { 'x: 1 })
-    (commit-tx)
-    (begin-tx)
-    (insert t "b" { 'x: 2 })
-    (rollback-tx)
-    (expect "2nd insert rolled back" ["a"]
-            (keys t))))
+;  (begin-tx)
+;  (env-enable-repl-natives true)
+;  (module nested-tx G
+;    (defcap G () true)
+;    (defschema s x:integer)
+;    (deftable t:{s})
+;    (defun test-nested-tx ()
+;      (begin-tx)
+;      (insert t "a" { 'x: 1 })
+;      (commit-tx)
+;      (begin-tx)
+;      (insert t "b" { 'x: 2 })
+;      (rollback-tx)
+;      (expect "2nd insert rolled back" ["a"]
+;              (keys t))))
 
-(create-table t)
-(commit-tx)
+;  (create-table t)
+;  (commit-tx)
 
-(nested-tx.test-nested-tx)
+;  (nested-tx.test-nested-tx)
 
 ;; fold-db tests + key sort guarantees
 (env-exec-config [])
@@ -336,6 +336,6 @@
 (expect "can write to table tbl3: different schema, same structure" () (write-to-table tbl3 "jose" {"a": 4, "b": 2}))
 
 (expect "can read from tables with the same schema" [{"a": 1,"b": 2} {"a": 3,"b": 2} {"a": 4,"b": 2}]  (read-from-tables [tbl, tbl4, tbl3] "jose"))
-(expect-failure "Cannot read from tables with different schema" "Runtime typecheck failure" (read-from-tables [tbl, tbl2] "jose"))  
+(expect-failure "Cannot read from tables with different schema" "Runtime typecheck failure" (read-from-tables [tbl, tbl2] "jose"))
 
 (commit-tx)

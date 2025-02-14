@@ -60,6 +60,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , chargeConstantWork
  , chargeUnconsWork
  , chargeTryNodeWork
+ , lookupFqNameOrFail
  ) where
 
 import Control.Lens hiding (from, to)
@@ -158,6 +159,11 @@ lookupFqName :: FullyQualifiedName -> EvalM e b i (Maybe (EvalDef b i))
 lookupFqName fqn =
   uses (esLoaded.loAllLoaded) (M.lookup fqn)
 {-# INLINABLE lookupFqName #-}
+
+lookupFqNameOrFail :: i -> FullyQualifiedName -> EvalM e b i (EvalDef b i)
+lookupFqNameOrFail info fqn = lookupFqName fqn >>= \case
+  Just defn -> pure defn
+  Nothing -> failInvariant info (InvariantUnboundFreeVariable fqn)
 
 getDefCap :: i -> FullyQualifiedName -> EvalM e b i (EvalDefCap b i)
 getDefCap info fqn = lookupFqName fqn >>= \case

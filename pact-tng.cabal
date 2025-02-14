@@ -249,6 +249,7 @@ library
     Pact.Core.SizeOf.Deriving
     Pact.Core.StackFrame
     Pact.Core.Legacy.LegacyCodec
+    Pact.Core.TransitiveDependencies
     Pact.Core.Verifiers
     Pact.Core.Interpreter
     Pact.Core.DeriveConTag
