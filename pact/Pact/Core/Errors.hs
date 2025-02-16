@@ -184,6 +184,7 @@ module Pact.Core.Errors
  , _HyperlaneDecodeErrorParseRecipient
  , _EntityNotAllowedInDefPact
  , _InvalidNumArgs
+ , _InvalidManagerFun
  , toPrettyLegacyError
  , BoundedText
  , _boundedText
