@@ -55,6 +55,8 @@ tableGasCostConfig = GasCostConfig
   , _gcSizeOfBytePenalty = 5
   , _gc_keccak256GasPerOneHundredBytes = 146
   , _gc_keccak256GasPerChunk = 2_120
+  , _gcTransitiveDependencySlope = (10, 1)
+  , _gcTransitiveDependencyIntercept = 10
   }
 
 
@@ -401,6 +403,11 @@ runTableModel nativeTable GasCostConfig{..} = \case
     MOpDesugarModule sz ->
       -- This is a pretty expensive traversal, so we will charge a bit more of a hefty price for it
       MilliGas (sz * _gcDesugarBytePenalty)
+    -- Todo: gas of computing transitive dep set
+    MOpFindTransitiveDep d ->
+      let (num, denom) = _gcTransitiveDependencySlope
+          depAmt = (d * num) `div` denom + 1
+      in MilliGas $ depAmt + _gcTransitiveDependencyIntercept
   GStrOp op -> case op of
     StrOpLength len ->
       let charsPerMg = 100

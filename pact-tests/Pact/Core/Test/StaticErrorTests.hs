@@ -738,6 +738,16 @@ desugarTests =
      (defconst identity foobar)
     )
   |])
+  , ("invalid_mgr_fun", isDesugarError _InvalidManagerFun, [text|
+    (module m g
+      (defcap g () true)
+      (defcap foo-mgr (a:integer b:integer) a)
+      (defcap FOO_MANAGED (a:string b:integer)
+        @managed b foo-mgr
+        true
+      )
+    )
+  |])
   ]
 
 executionTests :: [(String, PactError FileLocSpanInfo -> Bool, Text)]

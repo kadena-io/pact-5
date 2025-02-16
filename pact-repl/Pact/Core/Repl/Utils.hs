@@ -44,11 +44,13 @@ module Pact.Core.Repl.Utils
  , replPrintLn'
  , recordTestSuccess
  , recordTestFailure
+ , emptyTxState
  ) where
 
 import Control.Lens
 import Control.Monad ( when, unless )
 import Control.Monad.Reader
+import Control.Monad.State.Strict(put)
 
 import Data.Void
 import Data.IORef
@@ -178,6 +180,19 @@ whenReplFlagSet flag ma =
 unlessReplFlagSet :: ReplDebugFlag -> ReplM b () -> ReplM b ()
 unlessReplFlagSet flag ma =
   replFlagSet flag >>= \b -> unless b ma
+
+emptyTxState :: ReplM b ()
+emptyTxState = do
+  cs <- use esStack
+  esc <- use esCheckRecursion
+  lo <- preserveReplDefuns
+  put $ set esLoaded lo $ set esStack cs $ set esCheckRecursion esc $ def
+  where
+  preserveReplDefuns = do
+    lo <- use loaded
+    let preservedTLReplDefuns = M.filter (\(fqn, _) -> _fqModule fqn == replModuleName) (_loToplevel lo)
+    let preservedFQReplDefuns = M.filterWithKey (\fqn _ -> _fqModule fqn == replModuleName) (_loAllLoaded lo)
+    pure $ set loToplevel preservedTLReplDefuns $ set loAllLoaded preservedFQReplDefuns $ def
 
 replCompletion
   :: [Text]

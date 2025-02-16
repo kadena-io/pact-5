@@ -26,6 +26,7 @@ import qualified Pact.Core.Test.LegacyDBRegression as LegacyDbRegression
 import qualified Pact.Core.Test.PactContinuationTest as PactContinuationTests
 import qualified Pact.Core.Test.ClientTests as ClientTests
 import qualified Pact.Core.Test.Keccak256Tests as KeccakTests
+import qualified Pact.Core.Test.TransitiveDependencyTests as TransitiveDependencyTests
 
 main :: IO ()
 main = do
@@ -59,5 +60,6 @@ main = do
     , PactContinuationTests.tests
     , ClientTests.tests
     , KeccakTests.tests
+    , TransitiveDependencyTests.tests
     ]
 

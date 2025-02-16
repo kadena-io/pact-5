@@ -184,6 +184,7 @@ module Pact.Core.Errors
  , _HyperlaneDecodeErrorParseRecipient
  , _EntityNotAllowedInDefPact
  , _InvalidNumArgs
+ , _InvalidManagerFun
  , toPrettyLegacyError
  , BoundedText
  , _boundedText
@@ -344,6 +345,9 @@ data DesugarError
   | InvalidBlessedHash Text
   -- ^ Blessed hash has invalid format
   | InvalidNativeShadowing Text
+  -- ^ Name shadows an existing native
+  | InvalidManagerFun QualifiedName
+  -- ^ Manager function is an invalid ref
   deriving (Eq, Show,  Generic)
 
 instance NFData DesugarError
@@ -415,6 +419,8 @@ instance Pretty DesugarError where
       "Invalid blessed hash, incorrect format:" <+> pretty hs
     InvalidNativeShadowing t ->
       "Variable" <+> pretty t <+> "shadows native with the same name"
+    InvalidManagerFun qn ->
+      pretty qn <+> "is not a valid managed capability manager function." <+> pretty qn <+> "must be a defun"
 
 -- | Argument type mismatch meant for errors
 --   that does not force you to show the whole PactValue
@@ -1769,6 +1775,8 @@ desugarErrorToBoundedText = mkBoundedText . \case
       thsep ["Invalid blessed hash, incorrect format:", hs]
     InvalidNativeShadowing t ->
       thsep ["Variable", t, "shadows native with same name"]
+    InvalidManagerFun qn ->
+      thsep [renderQualName qn, "is not a valid managed capability manager function.", renderQualName qn, "must be a defun"]
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
 --  This will fork the chain, these messages will make it into outputs.
