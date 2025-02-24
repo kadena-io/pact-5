@@ -70,7 +70,8 @@ module Pact.Core.Environment.Types
  , replNativesEnabled
  , replCurrSource
  , replTx
- , replOutputLine
+ , replTraceLine
+ , replPrintLine
  , replTestResults
  , replLoad
  , replLoadedFiles
@@ -382,7 +383,11 @@ data ReplOutput where
   ReplStdOut :: ReplOutput
   ReplLogOut :: IORef [(Text, FileLocSpanInfo)] -> ReplOutput
 
+-- | The type of a
+type OutputWithLoc b = FileLocSpanInfo -> Text -> EvalM 'ReplRuntime b FileLocSpanInfo ()
+
 -- | Passed in repl environment
+--   TODO: move to Repl.Types
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
@@ -403,7 +408,8 @@ data ReplState b
   -- ^ The current repl tx, if one has been initiated
   , _replNativesEnabled :: Bool
   -- ^ Are repl natives enabled in module code
-  , _replOutputLine :: !(FileLocSpanInfo -> Text -> EvalM 'ReplRuntime b FileLocSpanInfo ())
+  , _replTraceLine :: !(OutputWithLoc b)
+  , _replPrintLine :: !(OutputWithLoc b)
   -- ^ The output line function, as an entry in the repl env
   --   to allow for custom output handling, e.g haskeline
   , _replLoad :: !(FilePath -> Bool -> EvalM 'ReplRuntime b FileLocSpanInfo ())

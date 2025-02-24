@@ -99,7 +99,8 @@ mkReplState ee printfn loadFn =
     , _replTLDefPos = mempty
     , _replTx = Nothing
     , _replNativesEnabled = False
-    , _replOutputLine = printfn
+    , _replTraceLine = printfn
+    , _replPrintLine = printfn
     , _replLoad = loadFn
     , _replLoadedFiles = mempty
     , _replTestResults = []
@@ -121,7 +122,8 @@ mkReplState' ee printfn =
     , _replTLDefPos = mempty
     , _replTx = Nothing
     , _replNativesEnabled = False
-    , _replOutputLine = printfn
+    , _replTraceLine = printfn
+    , _replPrintLine = printfn
     , _replLoad = \f reset -> void (loadFile interpretEvalDirect f reset)
     , _replLoadedFiles = mempty
     , _replTestResults = []
@@ -309,7 +311,7 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
     | otherwise = Lisp.parseReplProgram lexerOutput
   displayValue :: FileLocSpanInfo -> ReplCompileValue -> ReplM ReplCoreBuiltin ReplCompileValue
   displayValue _info v@(RCompileValue (InterpretValue PUnit _)) = pure v
-  displayValue info p = p <$ replPrintLn info p
+  displayValue info p = p <$ replTraceLn info p
   sliceCode = \case
     Lisp.TLModule{} -> sliceFromSource
     Lisp.TLInterface{} -> sliceFromSource

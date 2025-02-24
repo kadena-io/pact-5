@@ -46,17 +46,24 @@ import Pact.Core.Info
 import Pact.Core.Errors
 
 execScript :: Bool -> FilePath -> IO (Either (PactError FileLocSpanInfo) [ReplCompileValue], ReplState ReplCoreBuiltin)
-execScript dolog f = do
+execScript traceEnabled f = do
   pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   ee <- defaultEvalEnv pdb replBuiltinMap
-  ref <- newIORef (mkReplState' ee logger)
+  let replState = mkReplState' ee printLogger & replTraceLine .~ traceLogger
+  ref <- newIORef replState
   v <- evalReplM ref $ loadFile interpretEvalDirect f True
   state <- readIORef ref
   pure (v, state)
   where
-  logger :: FileLocSpanInfo -> Text -> EvalM e b i ()
-  logger (FileLocSpanInfo file info) v
-    | dolog = liftIO $ T.putStrLn $ T.pack file <> ":" <> renderCompactText info <> ": " <> v
+  logWithTrace traceType (FileLocSpanInfo file info) v =
+    liftIO $ T.putStrLn $ T.concat [T.pack file, ":", renderCompactText info, ":", traceType, ": ", v]
+  printLogger :: FileLocSpanInfo -> Text -> EvalM e b i ()
+  printLogger floc v
+    | traceEnabled = logWithTrace "Print" floc v
+    | otherwise = liftIO $ T.putStrLn v
+  traceLogger :: FileLocSpanInfo -> Text -> EvalM e b i ()
+  traceLogger floc v
+    | traceEnabled = logWithTrace "Trace" floc v
     | otherwise = pure ()
 
 -- | Render a nice error
