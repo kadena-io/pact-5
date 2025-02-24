@@ -21,7 +21,7 @@ Use the following argument to specify the value for negation.
 
 ### Return value
 
-The `negate` function returns the negation of the specified `value`
+The `negate` function returns the negation of the specified `value`.
 
 ### Examples
 

@@ -8,7 +8,7 @@ Use the `time` function to construct a time object from a UTC value using the IS
 
 The UTC format is the default time format in Pact for all time-related functions.
 Internally, the time object supports up to microsecond resolution.
-However, the values returned from the Pact interpreter as JSON are  serialized using the default format. 
+However, the values returned from the Pact interpreter as JSON are serialized using the default format. 
 If you need higher resolution, you can explicitly format times with the `%v` template and related codes.
 
 ### Basic syntax
@@ -37,7 +37,7 @@ The following example demonstrates how to use the `time` function in the Pact RE
 This example constructs a time object from the UTC value `"2016-07-22T11:26:35Z"`:
 
 ```pact
-pact>(time "2016-07-22T11:26:35Z")
+pact> (time "2016-07-22T11:26:35Z")
 2016-07-22 11:26:35 UTC
 ```
 
