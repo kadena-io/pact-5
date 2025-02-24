@@ -42,6 +42,8 @@ module Pact.Core.Repl.Utils
  , gasLogEntrytoPactValue
  , replPrintLn
  , replPrintLn'
+ , replTraceLn
+ , replTraceLn'
  , recordTestSuccess
  , recordTestFailure
  ) where
@@ -245,6 +247,17 @@ gasLogEntrytoPactValue entry = PString $ renderCompactText' $ n <> ": " <> prett
   where
     n = pretty (_gleArgs entry) <+> pretty (_gleInfo entry)
 
+replTraceLn :: Pretty a => FileLocSpanInfo -> a -> EvalM 'ReplRuntime b FileLocSpanInfo ()
+replTraceLn info p = replTraceLn' info (renderCompactText p)
+
+replTraceLn' :: FileLocSpanInfo -> Text -> EvalM 'ReplRuntime b FileLocSpanInfo ()
+replTraceLn' info p = do
+  r <- getReplState
+  case _replLogType r of
+    ReplStdOut -> _replTraceLine r info p
+    ReplLogOut v ->
+      liftIO (modifyIORef' v ((p, info):))
+
 replPrintLn :: Pretty a => FileLocSpanInfo -> a -> EvalM 'ReplRuntime b FileLocSpanInfo ()
 replPrintLn info p = replPrintLn' info (renderCompactText p)
 
@@ -252,7 +265,7 @@ replPrintLn' :: FileLocSpanInfo -> Text -> EvalM 'ReplRuntime b FileLocSpanInfo 
 replPrintLn' info p = do
   r <- getReplState
   case _replLogType r of
-    ReplStdOut -> _replOutputLine r info p
+    ReplStdOut -> _replPrintLine r info p
     ReplLogOut v ->
       liftIO (modifyIORef' v ((p, info):))
 

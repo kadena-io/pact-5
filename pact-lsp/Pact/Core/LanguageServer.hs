@@ -257,7 +257,8 @@ setupAndProcessFile nuri content = do
           , _replLoad = doLoad
           , _replLogType = ReplStdOut
           , _replLoadedFiles = mempty
-          , _replOutputLine = const $ const $ pure ()
+          , _replTraceLine = const $ const $ pure ()
+          , _replPrintLine = const $ const $ pure ()
           , _replTestResults = []
           }
   stateRef <- newIORef rstate
