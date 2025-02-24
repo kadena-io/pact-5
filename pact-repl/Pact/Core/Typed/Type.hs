@@ -8,6 +8,8 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Pact.Core.Typed.Type where
 
@@ -91,6 +93,13 @@ instance Pretty PrimType where
     PrimUnit -> "unit"
     -- PrimCapToken -> "cap-token"
 
+-- Todo: type family-ize Typed.Type to turn
+-- row instantiations into type errors
+type family TypeVariable v
+type family RowVariable v
+
+-- let ((x:module{k, y, z} some-module)) -- some_module : module {k, y, z, v, x, q}
+
 data Type n
   = TyPrim PrimType
   | TyVar n
@@ -100,34 +109,53 @@ data Type n
   | TyObject (RowTy n)
   | TyTable (RowTy n)
   | TyModRef (Set ModuleName)
-  | TyCapToken (CapRef n)
-  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+  | TyCapToken -- (CapRef n) -- todo: capref is useful for FV but for now exclude it
+  deriving (Show, Eq, Ord, Functor, Foldable, Traversable, Generic)
 
 data CapRef n
   = CapVar n
   | CapConcrete QualifiedName
-  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+  deriving (Show, Eq, Ord, Functor, Foldable, Traversable, Generic)
 
 data RowTy n
   = RowVar n
   | RowConcrete (Map Field (Type n))
-  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+  deriving (Show, Eq, Ord, Functor, Foldable, Traversable, Generic)
+
+instance Plated (Type n) where
+  plate f = \case
+    t@TyVar{} -> pure t
+    t@TyPrim{} -> pure t
+    TyFun l r ->
+      TyFun <$> f l <*> f r
+    TyNullary t -> TyNullary <$> f t
+    TyList n -> TyList <$> f n
+    TyObject o -> TyObject <$> plateRow o
+    TyTable o -> TyTable <$> plateRow o
+    TyModRef mr -> pure (TyModRef mr)
+    TyCapToken -> pure TyCapToken
+    where
+    plateRow = \case
+      RowVar n -> pure (RowVar n)
+      RowConcrete m ->
+        RowConcrete <$> traverse f m
+
 
 data PactKind
   = TyKind
   | RowKind
-  | UserDefKind
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data Schema
   = Schema QualifiedName (Map Field (Type Void))
   deriving (Eq, Show, Generic)
 
-instance NFData Schema
 
 data TypeVar n
-  = TypeVar n PactKind
-  deriving (Show, Eq)
+  = TypeVar
+    { _tpVar :: n
+    , _tpKind :: PactKind }
+  deriving (Show, Eq, Ord)
 
 
 tyVarKind :: TypeVar n -> PactKind
@@ -145,8 +173,8 @@ pattern RowVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
 pattern RowVariable ix a = TypeVar (NamedDeBruijn ix a) RowKind
 pattern TypeVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
 pattern TypeVariable ix a = TypeVar (NamedDeBruijn ix a) TyKind
-pattern UserDefVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
-pattern UserDefVariable ix a = TypeVar (NamedDeBruijn ix a) UserDefKind
+-- pattern UserDefVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
+-- pattern UserDefVariable ix a = TypeVar (NamedDeBruijn ix a) UserDefKind
 
 instance Pretty n => Pretty (CapRef n) where
   pretty = \case
@@ -180,7 +208,7 @@ instance Pretty n => Pretty (Type n) where
     TyModRef mn ->
       let mns = Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> S.toList mn))
       in "module" <> Pretty.braces mns
-    TyCapToken n -> "captoken" <> Pretty.angles (pretty n)
+    TyCapToken -> "cap-token"
 
 
 -- Built in typeclasses
@@ -197,12 +225,16 @@ data BuiltinTC n
   | EqRow (RowTy n)
   | RoseSubRow (RoseRow n) (RoseRow n)
   | RoseRowEq (RoseRow n) (RoseRow n)
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+
+-- (at "k" o)
+-- (at "k") :: for any row that contains a `k`, give me its value of type t.
+--   forall value_type, containing_row. ("k" |> value_type) `is contained in` containing_row => containing_row -> value_type
 
 data RoseRow n
   = RoseRowTy (RowTy n)
   | RoseRowCat (RoseRow n) (RoseRow n)
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
 instance Pretty ty => Pretty (RoseRow ty) where
   pretty = \case
@@ -261,8 +293,10 @@ instance (Pretty ty) => Pretty (BuiltinTC ty) where
 
 -- Note, no superclasses, for now
 newtype Pred tv
-  = Pred (BuiltinTC tv)
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+  = Pred { _typeclassPredicate :: BuiltinTC tv }
+  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+
+makeLenses ''Pred
 
 instance Pretty ty => Pretty (Pred ty) where
   pretty (Pred ty) = pretty ty
@@ -270,7 +304,7 @@ instance Pretty ty => Pretty (Pred ty) where
 
 data TypeScheme tv =
   TypeScheme [tv] [Pred tv]  (Type tv)
-  deriving Show
+  deriving (Show, Eq, Generic)
 
 instance Pretty ty => Pretty (TypeScheme ty) where
   pretty (TypeScheme tvs preds ty) =
@@ -322,10 +356,21 @@ literalPrim = \case
   LBool{} -> PrimBool
   LUnit -> PrimUnit
 
+returnType :: Lens' (Type n) (Type n)
+returnType f = \case
+  TyFun l r ->
+    TyFun l <$> returnType f r
+  a -> f a
+
 instance NFData PrimType
 instance NFData ty => NFData (RowTy ty)
 instance NFData ty => NFData (CapRef ty)
 instance NFData ty => NFData (Type ty)
+instance NFData Schema
+deriving newtype instance NFData ty => NFData (Pred ty)
+instance NFData name => NFData (RoseRow name)
+instance NFData name => NFData (BuiltinTC name)
+instance NFData tyname => NFData (TypeScheme tyname)
 -- instance NFData ty => NFData (Arg ty)
 
 -- makeLenses ''Arg

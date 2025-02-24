@@ -193,7 +193,6 @@ literalPrim = \case
 -- renderPred = T.pack . show . pretty
 
 
-
 data DefKind
   = DKDefun
   | DKDefConst
