@@ -1,6 +1,7 @@
-## txlog
+## txlog (DEPRECATED)
 
 Use `txlog` to return all updates made to a specified `table` in a particular transaction identified by its transaction identifier.
+This function is not supported in Pact 5 and there's no built-in replacement for it.
 
 ### Basic syntax
 
