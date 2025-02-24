@@ -277,7 +277,7 @@ sendHandler runtime (SendRequest submitBatch) = do
     requestKeys <- forM (_sbCmds submitBatch) $ \cmd -> do
       let requestKey = cmdToRequestKey cmd
       res <- liftIO $ try $! do
-        result <- computeResultAndUpdateState runtime requestKey cmd
+        result <- computeResultAndUpdateState runtime Transactional requestKey cmd
         storeResult <- newEmptyMVar
         writeChan (_srvChan runtime) (StoreMsg requestKey result storeResult)
         readMVar storeResult
@@ -288,8 +288,8 @@ sendHandler runtime (SendRequest submitBatch) = do
         Left (_::SomeException)-> throwError err500
     pure $ SendResponse $ RequestKeys requestKeys
 
-computeResultAndUpdateState :: ServerRuntime -> RequestKey -> Command Text -> IO (CommandResult Hash (PactOnChainError))
-computeResultAndUpdateState runtime requestKey cmd =
+computeResultAndUpdateState :: ServerRuntime -> ExecutionMode -> RequestKey -> Command Text -> IO (CommandResult Hash (PactOnChainError))
+computeResultAndUpdateState runtime execMode requestKey cmd =
   case verifyCommand @(StableEncoding PublicMeta) (fmap E.encodeUtf8 cmd) of
     ProcFail errStr -> do
       let pe = PEExecutionError (EvalError (T.pack errStr)) [] def
@@ -304,7 +304,7 @@ computeResultAndUpdateState runtime requestKey cmd =
             , mdVerifiers = maybe [] (fmap void) mverif
             }
       ge <- mkFreeGasEnv GasLogsDisabled
-      evalExec (RawCode (_pcCode code)) Transactional (_srDbEnv runtime) (_srSPVSupport runtime) ge mempty SimpleNamespacePolicy
+      evalExec (RawCode (_pcCode code)) execMode (_srDbEnv runtime) (_srSPVSupport runtime) ge mempty SimpleNamespacePolicy
         def msgData def parsedCode >>= \case
         Left pe ->
           pure $ pactErrorToCommandResult requestKey pe (Gas 0)
@@ -325,7 +325,7 @@ computeResultAndUpdateState runtime requestKey cmd =
             , _cProof = _cmProof contMsg
             }
       ge <- mkFreeGasEnv GasLogsDisabled
-      evalContinuation Transactional (_srDbEnv runtime) (_srSPVSupport runtime) ge mempty
+      evalContinuation execMode (_srDbEnv runtime) (_srSPVSupport runtime) ge mempty
         SimpleNamespacePolicy def msgData def cont >>= \case
           Left pe ->
             pure $ pactErrorToCommandResult requestKey pe (Gas 0)
@@ -366,7 +366,7 @@ localHandler :: ServerRuntime -> LocalRequest -> Handler LocalResponse
 localHandler env (LocalRequest cmd) = do
   let requestKey = cmdToRequestKey cmd
   res <- liftIO $ try $! do
-    result <- computeResultAndUpdateState env requestKey cmd
+    result <- computeResultAndUpdateState env Local requestKey cmd
     storeResult <- newEmptyMVar
     writeChan (_srvChan env) (StoreMsg requestKey result storeResult)
     (result,) <$> readMVar storeResult
