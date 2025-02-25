@@ -1,3 +1,19 @@
+5.1
+---
+### Features
+- Added pass for calculating the smallest dependency set on module deploys, which should shrink deployed module sizes even further (#331, #338)
+
+
+### Bugfixes
+- Reintroduce missing natives `hash-keccak` and `hash-poseidon` (#323, #324, #325)
+- Pact cli now reports failures and exits on repl test failure (#327)
+- Add checks for native shadowing in REPL and shadowing check module (#328)
+- Fixed transitive dependency module linking bug (#331, #338)
+- Fix repl to print regardless of trace flag (#334)
+
+### Misc
+- Added pact version command to verify linking (#1350)
+
 5.0
 ---
 ### Features
