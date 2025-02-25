@@ -178,15 +178,16 @@ initializePactDb serial db = do
   stmtsCache <- newIORef =<< createSysTables db
   txId <- newIORef (TxId 0)
   txLog <- newIORef []
+  em <- newIORef Nothing
   pure (PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' serial db stmtsCache
     , _pdbWrite = write' serial db txId txLog stmtsCache
     , _pdbKeys = readKeys db stmtsCache
     , _pdbCreateUserTable = createUserTable db txLog stmtsCache
-    , _pdbBeginTx = liftIO . beginTx txId db txLog
-    , _pdbCommitTx = liftIO $ commitTx txId db txLog
-    , _pdbRollbackTx = liftIO $ rollbackTx db txLog
+    , _pdbBeginTx = liftIO . beginTx em txId db txLog
+    , _pdbCommitTx = liftIO $ commitTx em txId db txLog
+    , _pdbRollbackTx = liftIO $ rollbackTx em db txLog
     }, stmtsCache)
 
 readKeys :: forall k v b i. SQL.Database -> IORef StmtCache -> Domain k v b i -> GasM b i [k]
@@ -229,23 +230,44 @@ readKeys db stmtCache = \case
 
 
 
-commitTx :: IORef TxId -> SQL.Database -> IORef [TxLog ByteString] -> IO [TxLog ByteString]
-commitTx txid db txLog = do
-  _ <- atomicModifyIORef' txid (\old@(TxId n) -> (TxId (succ n), old))
-  SQL.exec db "COMMIT TRANSACTION"
+commitTx
+  :: IORef (Maybe ExecutionMode)
+  -> IORef TxId
+  -> SQL.Database
+  -> IORef [TxLog ByteString]
+  -> IO [TxLog ByteString]
+commitTx emref txid db txLog = do
+  readIORef emref >>= \case
+    Nothing ->
+      pure ()
+    Just em ->
+      case em of
+        Transactional -> do
+          _ <- atomicModifyIORef' txid (\old@(TxId n) -> (TxId (succ n), old))
+          SQL.exec db "COMMIT TRANSACTION"
+        Local -> SQL.exec db "ROLLBACK TRANSACTION"
+  writeIORef emref Nothing
   txls <- atomicModifyIORef' txLog ([],)
   pure $ reverse txls
 
-beginTx :: IORef TxId -> SQL.Database -> IORef [TxLog ByteString] -> ExecutionMode -> IO (Maybe TxId)
-beginTx txid db txLog em = do
+beginTx
+  :: IORef (Maybe ExecutionMode)
+  -> IORef TxId
+  -> SQL.Database
+  -> IORef [TxLog ByteString]
+  -> ExecutionMode
+  -> IO (Maybe TxId)
+beginTx emref txid db txLog em = do
     SQL.exec db "BEGIN TRANSACTION"
     writeIORef txLog []
+    writeIORef emref (Just em)
     case em of
       Transactional -> Just <$> readIORef txid
       Local -> pure Nothing
 
-rollbackTx :: SQL.Database -> IORef [TxLog ByteString] -> IO ()
-rollbackTx db txLog = do
+rollbackTx :: IORef (Maybe ExecutionMode) -> SQL.Database -> IORef [TxLog ByteString] -> IO ()
+rollbackTx emref db txLog = do
+  writeIORef emref Nothing
   SQL.exec db "ROLLBACK TRANSACTION"
   writeIORef txLog []
 
