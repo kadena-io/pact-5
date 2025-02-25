@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DataKinds #-}
 
 
@@ -49,12 +50,12 @@ import Pact.Core.SizeOf
 
 genModule :: Word64 -> ModuleData CoreBuiltin Info
 genModule w =
-  sampleWithSeed (Seed.from w)
+  sampleWithSeed w
     (moduleDataOnlyGen builtinGen lineInfoGen)
 
 genModules :: Word64 -> [ModuleData CoreBuiltin Info]
 genModules w =
-  sampleWithSeed (Seed.from w)
+  sampleWithSeed w
     (G.list (R.constant 100 100) (moduleDataOnlyGen builtinGen lineInfoGen))
 
 sizeOfVsSize :: IO [(Int, Int)]
@@ -84,8 +85,8 @@ mixSeed (Seed v g) =
 
 -- Sample a generator with a fixed seed, and mix the seed
 -- if we can't generate something
-sampleWithSeed :: Seed -> Gen a -> a
-sampleWithSeed seed gen =
+sampleWithSeed :: Word64 -> Gen a -> a
+sampleWithSeed (Seed.from -> seed) gen =
     let
       loop n s =
         if n <= 0 then
@@ -96,13 +97,13 @@ sampleWithSeed seed gen =
               loop (n - 1) (mixSeed s)
             Just x ->
               Tree.treeValue x
-    in loop (100 :: Int) seed
+    in loop (500 :: Int) seed
 
 runModuleLoadBench :: PactDb CoreBuiltin Info -> Int -> Benchmark
 runModuleLoadBench pdb i =
   envWithCleanup mkModule doRollback $ \ ~(ee, mn, bs) ->
     bench (title bs) $ nfIO $ runEvalMResult (ExecEnv ee) def $ do
-      () <$ getModule def mn
+      getModule def mn
   where
   doRollback _ =
     ignoreGas def $ _pdbRollbackTx pdb

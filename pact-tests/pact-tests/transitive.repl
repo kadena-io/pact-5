@@ -1,29 +1,42 @@
+(env-gasmodel "table")
+(env-gaslimit 150000)
+
 (begin-tx)
+(env-gas 0)
 (interface barbar
   (defconst FOO_CONST:integer 1)
   (defconst FOO_CONST420:integer 420)
   )
+
+(expect "Gas of deploying barbar" 132 (env-gas))
 (commit-tx)
 
 (begin-tx)
+(env-gas 0)
 (module foo g
   (defcap g () true)
   (defun calls-foo () barbar.FOO_CONST)
   )
+(expect "Gas of deploying foo" 239 (env-gas))
 (commit-tx)
 
 (begin-tx)
+(env-gas 0)
 (module bar g
   (defcap g () true)
   (defun calls-bar () (foo.calls-foo))
 )
+
+(expect "Gas of deploying bar" 296 (env-gas))
 (commit-tx)
 
 (begin-tx)
+(env-gas 0)
 (module baz g
   (defcap g () true)
   (defun calls-baz () (bar.calls-bar))
 )
+(expect "Gas of deploying baz" 350 (env-gas))
 (commit-tx)
 
 (begin-tx)
@@ -31,6 +44,7 @@
 (commit-tx)
 
 (begin-tx)
+(env-gas 0)
 (module foo g
   (defcap g () true)
   (defun calls-foo (sender:string amount:integer)
@@ -60,6 +74,8 @@
       )
   )
   )
+(expect "Gas of deploying foo" 1014 (env-gas))
+(env-gas 0)
 
 (install-capability (foo.FOO_MANAGED "edmund" 100))
 (expect
@@ -79,6 +95,7 @@
 (commit-tx)
 
 (begin-tx)
+(env-gas 0)
 (module bar g
   (defcap g () true)
   (defun calls-bar ()
@@ -86,13 +103,16 @@
     (foo.calls-foo "bob" 100)
   )
 )
+(expect "Gas of redeploying bar" 862 (env-gas))
 (commit-tx)
 
 (begin-tx)
+(env-gas 0)
 (module baz g
   (defcap g () true)
   (defun calls-baz () (bar.calls-bar))
 )
+(expect "Gas of redeploying baz" 849 (env-gas))
 (commit-tx)
 
 (begin-tx)

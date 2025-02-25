@@ -177,10 +177,6 @@ data GasCostConfig
   -- ^ Cost of keccak gas per 100 bytes
   , _gc_keccak256GasPerChunk :: !SatWord
   -- ^ Cost of keccak gas per chunk
-  , _gcTransitiveDependencySlope :: !(SatWord, SatWord)
-  -- ^ The cost slope of transitive dependency traversals
-  , _gcTransitiveDependencyIntercept :: !SatWord
-  -- ^ The intercept for transitive dependency traversals
   } deriving (Eq, Show, Generic)
 
 instance NFData GasCostConfig
@@ -454,8 +450,6 @@ freeGasCostConfig = GasCostConfig
   -- ^ Cost of keccak gas per 100 bytes
   , _gc_keccak256GasPerChunk = 1
   -- ^ Cost of keccak gas per chunk
-  , _gcTransitiveDependencySlope = (1, 1)
-  , _gcTransitiveDependencyIntercept = 1
   }
 
 data EnableGasLogs
