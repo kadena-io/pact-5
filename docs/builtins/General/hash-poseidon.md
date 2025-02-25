@@ -1,11 +1,15 @@
 ## hash-poseidon
-Use `hash-poseidon` to compute the Poseidon Hash Function. Note: This is a reference version of the Poseidon hash function.
+
+Use `hash-poseidon` to compute the Poseidon Hash Function. 
+Note that this is a reference version of the Poseidon hash function.
 
 ### Basic syntax
 
 To compute the Poseidon Hash Function using the reference version, use the following syntax:
 
-`(hash-poseidon i j k l m n o p)`
+```pact
+(hash-poseidon i j k l m n o p)
+```
 
 ### Arguments
 
@@ -13,7 +17,7 @@ Use the following arguments to specify the inputs for computing the Poseidon has
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `i`, `j`, `k`, `l`, `m`, `n`, `o`, `p` | `integer` | Specifies the inputs for the Poseidon hash function. |
+| `i`, `j`, `k`, `l`, `m`, `n`, `o`, `p` | integer | Specifies the inputs for the Poseidon hash function. |
 
 ### Return value
 

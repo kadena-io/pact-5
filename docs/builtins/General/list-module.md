@@ -9,6 +9,7 @@ To list the modules deployed and available for loading, use the following syntax
 ```pact
 (list-modules)
 ```
+
 ## Arguments
 
 The `list-modules` function takes no arguments.

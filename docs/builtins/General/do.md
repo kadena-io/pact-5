@@ -1,13 +1,13 @@
 ## do
 
-`do` is a special form for evaluating a sequence of expressions and returning the last one as the result
+Use `do` to evaluate a sequence of expressions in order and only return the result from the last expression.
 
 ### Basic syntax
 
 Use the following syntax:
 
 ```pact
-(do (my-expression1) (my-expression2) (my-return-exrepssion))
+(do (my-expression1) (my-expression2) (my-return-expression))
 ```
 
 ### Examples
@@ -25,5 +25,4 @@ pact> (do (enforce false "boom") (+ 1 2))
 (interactive):1:4: boom
  1 | (do (enforce false "boom") (+ 1 2))
    |     ^^^^^^^^^^^^^^^^^^^^^^
-
 ```
