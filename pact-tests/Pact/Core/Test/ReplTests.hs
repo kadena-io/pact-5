@@ -89,7 +89,7 @@ runReplTest (ReplSourceDir path) pdb file src interp = do
       let rendered = renderLocatedPactErrorFromState rstate' e
       assertFailure (T.unpack rendered)
     Right _ -> do
-      traverse_ ensurePassing . _replTestResults =<< readIORef stateRef
+      traverse_ ensurePassing . reverse . _replTestResults =<< readIORef stateRef
       ensureModuleHashesMatch
   where
   moduleHashMatches mn = void $ runMaybeT $ do

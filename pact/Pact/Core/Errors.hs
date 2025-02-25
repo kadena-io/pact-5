@@ -1025,7 +1025,7 @@ instance Pretty UserRecoverableError where
     UserEnforceError t -> pretty t
     OneShotCapAlreadyUsed -> "One-shot managed capability used more than once"
     CapabilityNotGranted ct ->
-      "require-capability: not granted:" <+> parens (pretty (_ctName ct))
+      "require-capability: not granted:" <+> pretty ct
     NoSuchObjectInDb tn (RowKey rk) ->
       "No value found in table" <+> pretty tn <+> "for key:" <+> pretty rk
     KeysetPredicateFailure ksPred kskeys ->
