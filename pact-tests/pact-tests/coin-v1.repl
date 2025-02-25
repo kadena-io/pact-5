@@ -16,7 +16,7 @@
 (env-gaslog)
 (expect
   "Gas cost of loading coin contract"
-  16727 (env-gas))
+  16429 (env-gas))
 (env-gas 0)
 (commit-tx)
 
@@ -114,12 +114,12 @@
 ; w/o capability
 (expect-failure
   "direct call to credit fails"
-  "require-capability: not granted: (coin.CREDIT)"
+  "require-capability: not granted: (coin.CREDIT \"emily\")"
   (credit 'emily (read-keyset 'emily) 1.0))
 
 (expect-failure
   "direct call to debit fails"
-  "require-capability: not granted: (coin.DEBIT)"
+  "require-capability: not granted: (coin.DEBIT \"emily\")"
   (debit 'emily 1.0))
 
 (env-gas 0) (env-gaslog)
