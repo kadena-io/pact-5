@@ -211,7 +211,6 @@ evalTopLevel interpreter (RawCode code) tlFinal deps = do
       -- can't fix it later.
         CapGov _ -> pure ()
       -- Write sliced modules to the pact db
-      evalWrite (_mInfo m) pdb Write DModuleSource (getHashedModuleName m) (ModuleCode code)
 
       -- Get all of the _new_ dependencies (that is, members of the deployed module)
       let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
@@ -229,11 +228,13 @@ evalTopLevel interpreter (RawCode code) tlFinal deps = do
       mSize <- sizeOf (_mInfo m) SizeOfV0 mdata
       chargeGasArgs (_mInfo m) (GWrite mSize)
       evalWrite (_mInfo m) pdb Write DModules (view mName m) mdata
+
+      evalWrite (_mInfo m) pdb Write DModuleSource (getHashedModuleName m) (ModuleCode code)
+
       -- Get all
       let newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_mName m) d))) <$> fqDeps
           loadNewModule =
             over loModules (M.insert (_mName m) mdata) .
-            over loAllLoaded (M.union newLoaded) .
             over loToplevel (M.union newTopLevel)
       esLoaded %= loadNewModule
       esCaps . csModuleAdmin %= S.union (S.singleton (_mName m))
