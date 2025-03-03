@@ -7,7 +7,7 @@ module Pact.Core.IR.Eval.Direct.ReplBuiltin
 
 
 import Control.Lens
-import Control.Monad(when)
+import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Data.Either(partitionEithers)
@@ -404,7 +404,7 @@ envExecConfig info b _env = \case
     s' <- traverse go (V.toList s)
     let (knownFlags, unknownFlags) = partitionEithers s'
     -- Emit warning for unknown flags
-    emitPactWarning info $ UnknownReplFlags unknownFlags
+    unless (null unknownFlags) $ emitPactWarning info $ UnknownReplFlags unknownFlags
     let flagSet = S.fromList knownFlags
     replEvalEnv . eeFlags .== flagSet
     replEvalEnv . eeNatives .== versionedReplNatives flagSet

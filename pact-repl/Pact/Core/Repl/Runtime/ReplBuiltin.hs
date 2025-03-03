@@ -7,7 +7,7 @@
 module Pact.Core.Repl.Runtime.ReplBuiltin where
 
 import Control.Lens
-import Control.Monad(when)
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Text(Text)
@@ -428,7 +428,7 @@ envExecConfig info b cont handler _env = \case
     s' <- traverse go (V.toList s)
     let (knownFlags, unknownFlags) = partitionEithers s'
     -- Emit warning for unknown flags
-    emitPactWarning info $ UnknownReplFlags unknownFlags
+    unless (null unknownFlags) $ emitPactWarning info $ UnknownReplFlags unknownFlags
 
     let flagSet = S.fromList knownFlags
     replEvalEnv . eeFlags .== flagSet
