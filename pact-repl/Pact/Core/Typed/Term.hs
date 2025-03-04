@@ -41,6 +41,7 @@ module Pact.Core.Typed.Term
  , ordinaryDefPactStepExec
  , Apply(..)
  , TypeApp(..)
+ , TypedObjectOp(..)
  ) where
 
 import Control.Lens
@@ -62,16 +63,22 @@ import Pact.Core.Hash
 import Pact.Core.Guards
 import Pact.Core.Capabilities
 import Pact.Core.PactValue(PactValue)
-import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
-
+import Pact.Core.Pretty
 import Pact.Core.Typed.Type
 
 import qualified Pact.Core.Pretty as Pretty
+import qualified Data.Map.Strict as M
 
 data TypeApp tyname
   = TyAppType (Type tyname)
+  | TyAppRow (RowTy tyname)
   | TyAppVar tyname
   deriving (Show, Eq, Generic)
+
+data TypedObjectOp
+  = ObjConcat
+  | ObjAccess Field
+  deriving (Eq, Show, Generic)
 
 -- | Typed pact core terms
 data Term name tyname builtin info
@@ -104,6 +111,8 @@ data Term name tyname builtin info
   -- ^ an object literal
   | Try (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Error handling
+  | ObjectOp TypedObjectOp info
+  | Format (Term name tyname builtin info) [Term name tyname builtin info] info
   deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
 data Apply term i =
@@ -247,8 +256,8 @@ data IfDefPact ty info
 data IfDefun ty info
   = IfDefun
   { _ifdName :: Text
-  , _ifdArgs :: [Arg ty info]
-  , _ifdRType :: Type ty
+  , _ifdArgs :: [TypedArg ty info]
+  , _ifdType :: Type ty
   , _ifdInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
@@ -294,12 +303,73 @@ type CoreEvalModule tyname i = Module Name tyname CoreBuiltin i
 type CoreEvalTopLevel tyname i = TopLevel Name tyname CoreBuiltin i
 type CoreEvalReplTopLevel tyname i = ReplTopLevel Name tyname CoreBuiltin i
 
+instance Pretty TypedObjectOp where
+  pretty = \case
+    ObjConcat -> "+"
+    ObjAccess f -> "at" <+> pretty f
+
 instance Pretty tyname => Pretty (TypeApp tyname) where
   pretty = \case
     TyAppType t ->
       "@" <> Pretty.parens (pretty t)
     TyAppVar tn ->
       "@" <> Pretty.parens (pretty tn)
+    TyAppRow row ->
+      "@" <> Pretty.parens (pretty row)
+
+
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (Defun name ty b i) where
+  pretty (Defun name _args ty _term _) =
+    parens $ "defun" <+> pretty name <> ":" <> pretty ty
+
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefPact name ty b i) where
+  pretty _ = error "todo"
+
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefCap name ty b i) where
+  pretty (DefCap name _args ty _ _ _) =
+      parens $ "defcap" <+> pretty name <> ":" <> pretty ty
+
+instance Pretty ty => Pretty (DefSchema ty info) where
+  pretty (DefSchema n schema i) =
+    let argList = [Arg k (Just t) i | (Field k, t) <- M.toList schema]
+    in pretty $ PrettyLispApp ("defschema " <> n) argList
+
+instance Pretty (DefTable info) where
+  pretty (DefTable tblname schema _) =
+    parens $ "deftable" <+> pretty tblname <> ":" <> pretty schema
+
+
+instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Step name ty builtin info) where
+  pretty = \case
+    Step t -> parens ("step" <+> pretty t)
+    StepWithRollback t1 t2 -> parens ("step-with-rollback" <+> pretty t1 <+> pretty t2)
+
+instance (Pretty ty) => Pretty (DefConst ty i) where
+  pretty (DefConst n ty v _) =
+    parens $ "defconst" <+> pretty n <> ":" <> pretty ty <+> pretty v
+
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (Def name ty b i) where
+  pretty = \case
+    Dfun d -> pretty d
+    DConst d -> pretty d
+    DCap d -> pretty d
+    DSchema d -> pretty d
+    DTable d -> pretty d
+    DPact d -> pretty d
+
+-- instance (Pretty name, Pretty ty, Pretty b) => Pretty (Module name ty b i) where
+--   pretty (Module mname gov defs _blessed imports implements mhash _mtxh _mcode _minfo) =
+--     parens $
+--       "module"
+--       <+> pretty mname
+--       <+> pretty gov
+--       <> nest 2 (
+--         line <>
+--         "; HASH:" <+> dquotes (pretty mhash) <> line <>
+--         (if null imports then mempty else vsep (pretty <$> imports) <> line) <>
+--         (if null implements then mempty else vsep ((\p -> parens ("implements" <+> pretty p)) <$> implements) <> line) <>
+--         vsep (pretty <$> defs)
+--       )
 
 instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
   pretty = \case
@@ -333,6 +403,9 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
     ObjectLit n _ ->
       Pretty.braces (Pretty.hsep $ Pretty.punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
+    ObjectOp o _ -> pretty o
+    Format o o' _ ->
+      Pretty.parens ("format" <+> pretty o <+> Pretty.hsep (pretty <$> o'))
 
 termBuiltin
   :: Traversal (Term name tyname builtin info)
@@ -367,6 +440,10 @@ termBuiltin f = \case
     Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure info
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
+  ObjectOp o i ->
+    pure (ObjectOp o i)
+  Format o o' i ->
+    Format <$> termBuiltin f o <*> traverse (termBuiltin f) o' <*> pure i
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
@@ -398,6 +475,11 @@ termInfo f = \case
     Constant l <$> f i
   Try e1 e2 i ->
     Try e1 e2 <$> f i
+  ObjectOp o i ->
+    ObjectOp o <$> f i
+  Format o o' i ->
+    Format o o' <$> f i
+
 
 instance Plated (Term name tyname builtin info) where
   plate f = \case
@@ -423,10 +505,14 @@ instance Plated (Term name tyname builtin info) where
     Constant l i -> pure (Constant l i)
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
+    ObjectOp o i -> pure (ObjectOp o i)
+    Format o o' i ->
+      Format <$> f o <*> traverse f o' <*> pure i
 
 makePrisms ''IfDef
 makePrisms ''Def
 
+instance NFData TypedObjectOp
 instance (NFData name) => NFData (TypeApp name)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty b info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Def name ty b info)

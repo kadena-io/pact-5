@@ -791,6 +791,7 @@ data ReplOnlyBuiltin
   | REnvSetDebugFlag
   | RLoad
   | RLoadWithEnv
+  | RTypecheck
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -841,6 +842,8 @@ instance IsBuiltin ReplOnlyBuiltin where
     REnvSetDebugFlag -> 1
     RLoad -> 1
     RLoadWithEnv -> 2
+    RTypecheck -> 1
+
 -- Note: commented out natives are
 -- to be implemented later
 data ReplBuiltin b
@@ -925,6 +928,7 @@ replBuiltinsToText = \case
   REnvSetDebugFlag -> "env-set-debug-flag"
   RLoad -> "load"
   RLoadWithEnv -> "load-with-env"
+  RTypecheck -> "typecheck"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

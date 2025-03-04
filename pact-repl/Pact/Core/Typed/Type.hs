@@ -150,12 +150,20 @@ data Schema
   = Schema QualifiedName (Map Field (Type Void))
   deriving (Eq, Show, Generic)
 
+instance Pretty PactKind where
+  pretty = \case
+    TyKind -> "TYPE"
+    RowKind -> "ROW"
 
 data TypeVar n
   = TypeVar
     { _tpVar :: n
     , _tpKind :: PactKind }
   deriving (Show, Eq, Ord)
+
+instance Pretty n => Pretty (TypeVar n) where
+  pretty (TypeVar n k) =
+    pretty n <+> ":" <+> pretty k
 
 
 tyVarKind :: TypeVar n -> PactKind
@@ -183,7 +191,7 @@ instance Pretty n => Pretty (CapRef n) where
 
 instance Pretty n => Pretty (RowTy n) where
   pretty = \case
-    RowVar n -> pretty n
+    RowVar n -> "'" <> pretty n
     RowConcrete m ->
       Pretty.braces $ Pretty.hsep (prettyObj <$> M.toList m)
     where
@@ -192,7 +200,7 @@ instance Pretty n => Pretty (RowTy n) where
 instance Pretty n => Pretty (Type n) where
   pretty = \case
     TyPrim p -> pretty p
-    TyVar n -> "typeVar" <> Pretty.brackets (pretty n)
+    TyVar n -> "'" <> pretty n
     TyList n ->
       Pretty.brackets (pretty n)
     TyFun arg ret ->
@@ -200,10 +208,10 @@ instance Pretty n => Pretty (Type n) where
     TyNullary ret ->
       Pretty.parens ("=>" <+> pretty ret)
     TyObject m ->
-      pretty m
+      "object" <> Pretty.braces (pretty m)
       -- Pretty.braces (Pretty.hsep (prettyObj <$> (M.toList m)))
     TyTable m ->
-      pretty m
+      "table" <> Pretty.braces (pretty m)
       -- Pretty.braces (Pretty.hsep (prettyObj <$> (M.toList m)))
     TyModRef mn ->
       let mns = Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> S.toList mn))
@@ -227,9 +235,6 @@ data BuiltinTC n
   | RoseRowEq (RoseRow n) (RoseRow n)
   deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
--- (at "k" o)
--- (at "k") :: for any row that contains a `k`, give me its value of type t.
---   forall value_type, containing_row. ("k" |> value_type) `is contained in` containing_row => containing_row -> value_type
 
 data RoseRow n
   = RoseRowTy (RowTy n)
@@ -247,6 +252,8 @@ pattern RoseConcrete o = RoseRowTy (RowConcrete o)
 
 pattern RoseVar :: n -> RoseRow n
 pattern RoseVar v = (RoseRowTy (RowVar v))
+
+{-# COMPLETE RoseVar, RoseConcrete, RoseRowCat #-}
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt
@@ -306,6 +313,11 @@ data TypeScheme tv =
   TypeScheme [tv] [Pred tv]  (Type tv)
   deriving (Show, Eq, Generic)
 
+instance Pretty Schema where
+  pretty (Schema _qn tys) =
+    -- todo: fix
+    pretty (M.toList tys)
+
 instance Pretty ty => Pretty (TypeScheme ty) where
   pretty (TypeScheme tvs preds ty) =
     case tvs of
@@ -360,6 +372,8 @@ returnType :: Lens' (Type n) (Type n)
 returnType f = \case
   TyFun l r ->
     TyFun l <$> returnType f r
+  TyNullary r ->
+    TyNullary <$> returnType f r
   a -> f a
 
 instance NFData PrimType

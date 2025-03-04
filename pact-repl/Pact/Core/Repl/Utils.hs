@@ -315,9 +315,12 @@ instance DebugPrintable 'ReplRuntime (ReplBuiltin CoreBuiltin) where
               liftIO $ do
                 putStrLn "----------- Parser output ----------------"
                 print (pretty term)
-          DPDesugar -> whenReplFlagSet ReplDebugDesugar $ case term of
-            Term.TLTerm t ->
-              liftIO $ do
-                putStrLn "----------- Desugar output ---------------"
-                print (pretty t)
-            _ -> pure ()
+          DPDesugar -> whenReplFlagSet ReplDebugDesugar $ do
+            let info = view Term.topLevelInfo term
+            replTraceLn' info "----------- Desugar output ---------------"
+            case term of
+              Term.TLTerm t ->
+                replTraceLn info t
+              Term.TLModule m ->
+                replTraceLn info m
+              _ -> pure ()
