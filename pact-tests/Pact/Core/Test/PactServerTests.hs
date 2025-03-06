@@ -136,6 +136,17 @@ tests =  withResource
         assertStatus 200 res
         let (Just (LocalResponse cmdResult)) :: Maybe LocalResponse = A.decodeStrict $ LBS.toStrict reqResp
         liftIO $ assertEqual "Result match expected output" (PactResultOk $ PInteger 3) (_crResult cmdResult)
+
+    , mkTestCase env "regression #347 (tx validated on local, rejected on send)" $ do
+        ks <- liftIO generateEd25519KeyPair
+        cmd <- liftIO $ mkCmd ks "(+ 1 2)"
+        let lreq = J.encode $ J.build $ LocalRequest cmd
+        res <- postWithHeaders "/api/v1/local" lreq [(HTTP.hContentType, "application/json")]
+        assertStatus 200 res
+
+        let sreq = J.encode $ J.build $ SubmitBatch $ cmd NE.:| []
+        resSend <- postWithHeaders "/api/v1/send" sreq [(HTTP.hContentType, "application/json")]
+        assertStatus 200 resSend
     ]
   integrationTests env = testGroup "integration test (combined send and listen)"
     [ mkTestCase env "send and listen request" $ do
