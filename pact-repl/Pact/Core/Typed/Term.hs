@@ -21,6 +21,7 @@ module Pact.Core.Typed.Term
  , TopLevel(..)
  , ReplTopLevel(..)
  , Literal(..)
+ , Step(..)
  , termInfo
  , termBuiltin
  -- Post-overload
@@ -49,7 +50,9 @@ import Control.DeepSeq
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty)
 import Data.Map.Strict(Map)
+import Data.Set (Set)
 import Data.Void
+import Data.IntMap.Strict (IntMap)
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
 import GHC.Generics
@@ -68,11 +71,13 @@ import Pact.Core.Typed.Type
 
 import qualified Pact.Core.Pretty as Pretty
 import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 
 data TypeApp tyname
   = TyAppType (Type tyname)
   | TyAppRow (RowTy tyname)
   | TyAppVar tyname
+  | TyAppRef (Set ModuleName)
   deriving (Show, Eq, Generic)
 
 data TypedObjectOp
@@ -143,8 +148,8 @@ data Step name ty builtin info
 data DefPact name tyname builtin info
   = DefPact
   { _dpName :: Text
-  , _dpArgs :: [Arg Void info]
-  , _dpType :: TypeScheme tyname
+  , _dpArgs :: [TypedArg (Type Void) info]
+  , _dpType :: IntMap (Type Void)
   , _dpSteps :: NonEmpty (Step name tyname builtin info)
   , _dpInfo :: info
   } deriving (Show, Functor, Eq, Generic)
@@ -173,7 +178,7 @@ data DefCap name tyname builtin info
   , _dcapInfo :: info
   } deriving (Show, Functor, Eq, Generic)
 
-data DefSchema ty info
+data DefSchema info
   = DefSchema
   { _dsName :: Text
   , _dsSchema :: Map Field (Type Void)
@@ -199,7 +204,7 @@ data Def name ty builtin info
   = Dfun (Defun name ty builtin info)
   | DConst (DefConst ty info)
   | DCap (DefCap name ty builtin info)
-  | DSchema (DefSchema ty info)
+  | DSchema (DefSchema info)
   | DTable (DefTable info)
   | DPact (DefPact name ty builtin info)
   deriving (Show, Functor, Eq, Generic)
@@ -245,37 +250,38 @@ data Interface ty info
   , _ifInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
-data IfDefPact ty info
+data IfDefPact info
   = IfDefPact
-  { _ifdpName :: Text
-  , _ifdpArgs :: [Arg ty info]
-  , _ifdpRType :: Type ty
+  { _ifdpSpec :: TypedArg (Type Void) info
+  , _ifdpArgs :: [Arg Void info]
+  , _ifdpRType :: Type Void
+  , _ifDefcap :: DefCapMeta BareName
   , _ifdpInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
-data IfDefun ty info
+data IfDefun info
   = IfDefun
-  { _ifdName :: Text
-  , _ifdArgs :: [TypedArg ty info]
-  , _ifdType :: Type ty
+  { _ifdSpec :: TypedArg (Type Void) info
+  , _ifdArgs :: [TypedArg (Type Void) info]
+  , _ifdType :: Type Void
   , _ifdInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
-data IfDefCap ty info
+data IfDefCap info
   = IfDefCap
-  { _ifdcName :: Text
-  , _ifdcArgs :: [Arg ty info]
-  , _ifdcRType :: Type ty
+  { _ifdcSpec :: TypedArg (Type Void) info
+  , _ifdcArgs :: [TypedArg (Type Void) info]
+  , _ifdcType :: Type Void
   , _ifdcMeta :: DefCapMeta BareName
   , _ifdcInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
 data IfDef ty info
-  = IfDfun (IfDefun ty info)
+  = IfDfun (IfDefun info)
   | IfDConst (DefConst ty info)
-  | IfDCap (IfDefCap ty info)
-  | IfDPact (IfDefPact ty info)
-  | IfDSchema (DefSchema ty info)
+  | IfDCap (IfDefCap info)
+  | IfDPact (IfDefPact info)
+  | IfDSchema (DefSchema info)
   deriving (Show, Eq, Functor, Generic)
 
 data TopLevel name tyname builtin info
@@ -316,6 +322,8 @@ instance Pretty tyname => Pretty (TypeApp tyname) where
       "@" <> Pretty.parens (pretty tn)
     TyAppRow row ->
       "@" <> Pretty.parens (pretty row)
+    TyAppRef r ->
+      "@ref" <> Pretty.braces (Pretty.hsep (pretty <$> S.toList r))
 
 
 instance (Pretty name, Pretty ty, Pretty b) => Pretty (Defun name ty b i) where
@@ -329,7 +337,7 @@ instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefCap name ty b i) where
   pretty (DefCap name _args ty _ _ _) =
       parens $ "defcap" <+> pretty name <> ":" <> pretty ty
 
-instance Pretty ty => Pretty (DefSchema ty info) where
+instance Pretty (DefSchema info) where
   pretty (DefSchema n schema i) =
     let argList = [Arg k (Just t) i | (Field k, t) <- M.toList schema]
     in pretty $ PrettyLispApp ("defschema " <> n) argList
@@ -516,7 +524,7 @@ instance NFData TypedObjectOp
 instance (NFData name) => NFData (TypeApp name)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty b info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Def name ty b info)
-instance (NFData name, NFData info) => NFData (DefSchema name info)
+instance (NFData info) => NFData (DefSchema info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Defun name ty b info)
 instance (NFData ty, NFData info) => NFData (DefConst ty info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (DefCap name ty b info)
@@ -525,7 +533,7 @@ instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Step name ty
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Module name ty b info)
 instance (NFData ty, NFData info) => NFData (Interface ty info)
 instance (NFData ty, NFData info) => NFData (IfDef ty info)
-instance (NFData ty, NFData info) => NFData (IfDefun ty info)
-instance (NFData ty, NFData info) => NFData (IfDefPact ty info)
-instance (NFData ty, NFData info) => NFData (IfDefCap ty info)
+instance (NFData info) => NFData (IfDefun info)
+instance (NFData info) => NFData (IfDefPact info)
+instance (NFData info) => NFData (IfDefCap info)
 instance (NFData info) => NFData (DefTable info)

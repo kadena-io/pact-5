@@ -72,7 +72,6 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Errors
 import Pact.Core.Environment
-import Pact.Core.Type
 import Pact.Core.Builtin
 import Pact.Core.PactValue
 import Pact.Core.Debug

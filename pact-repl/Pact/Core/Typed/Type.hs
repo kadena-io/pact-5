@@ -8,14 +8,52 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Pact.Core.Typed.Type where
+module Pact.Core.Typed.Type
+ ( Type(..)
+ , RowTy(..)
+ , MRef(..)
+ , PactKind(..)
+ , Schema(..)
+ , TypeVar(..)
+ , RoseRow(..)
+ , DebruijnTypeVar
+ , pattern RowVariable
+ , pattern TypeVariable
+ , pattern RoseConcrete
+ , pattern RoseVar
+ , pattern TyInt
+ , pattern TyDecimal
+ , pattern TyTime
+ , pattern TyBool
+ , pattern TyString
+ , pattern TyGuard
+ , pattern (:~>)
+ , pattern NonGeneric
+ , pattern TyUnit
+ , pattern MRefVariable
+ , BuiltinTC(..)
+ , TypeScheme(..)
+ , PrimType(..)
+ , Pred
+ , DefnType(..)
+ , tyVarKind
+ , tyFunToArgList
+ , traverseTCType
+ , traverseRoseRowType
+ , traverseRowTy
+ , typeOfLit
+ , literalPrim
+ , returnType
+ , liftType
+ , fromCorePrimType
+ , renderPrimType
+ )where
 
 import Control.DeepSeq
 import Data.Void
-import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import GHC.Generics
@@ -30,6 +68,8 @@ import qualified Pact.Core.Type as CoreType
 
 import qualified Pact.Core.Pretty as Pretty
 import Control.Lens
+import Pact.Core.Info
+import Data.IntMap (IntMap)
 
 data PrimType
   = PrimInt
@@ -66,21 +106,8 @@ fromCorePrimType = \case
   CoreType.PrimTime -> PrimTime
   CoreType.PrimUnit -> PrimUnit
 
-liftCoreType :: CoreType.Type -> Type a
-liftCoreType = \case
-  CoreType.TyPrim p -> TyPrim (fromCorePrimType p)
-  CoreType.TyList t ->
-    TyList $ liftCoreType t
-  CoreType.TyModRef mns -> TyModRef mns
-  CoreType.TyObject (CoreType.Schema _qn m) ->
-    TyObject $ RowConcrete $ liftCoreType <$> m
-  CoreType.TyTable (CoreType.Schema _qn m) ->
-    TyObject $ RowConcrete $ liftCoreType <$> m
-  _ -> error "unsupported type for typechecking"
-
 liftType :: Type Void -> Type a
 liftType = fmap absurd
-
 
 instance Pretty PrimType where
   pretty = \case
@@ -93,12 +120,71 @@ instance Pretty PrimType where
     PrimUnit -> "unit"
     -- PrimCapToken -> "cap-token"
 
--- Todo: type family-ize Typed.Type to turn
--- row instantiations into type errors
-type family TypeVariable v
-type family RowVariable v
+-- Todo: I want to remove how rows, type variables and modref variables share one type variable type,
+-- because it leads to a lot of "this is impossible" type scenarios that I have to satisfy to make
+-- the compiler happy, but type families make many other things much less ergonomic. The following comment is
+-- just a sketch of what this might look like if I do pull the trigger on type families for this.
+--
+--
+-- data InferenceMode s
 
--- let ((x:module{k, y, z} some-module)) -- some_module : module {k, y, z, v, x, q}
+-- type InferenceLevel = Int
+
+-- data InferenceVar
+--   = Unbound Text Unique !InferenceLevel
+--   | Bound Text Unique
+--   deriving (Eq, Show)
+
+-- data TypeRef n
+--   = TV InferenceVar
+--   | LinkTy (Type n)
+--   deriving (Eq, Show)
+
+-- data RowRef n
+--   = RV InferenceVar
+--   | LinkRow (RowTy n)
+--   deriving (Show)
+
+-- data ModRefRef n
+--   = MV InferenceVar
+--   | LinkModRef (S.Set ModuleName)
+--   deriving (Show)
+
+-- data TypeVariable v where
+--   TVAbsurd :: Void -> TypeVariable Void
+--   TVInference :: STRef s (TypeRef (InferenceMode s)) -> TypeVariable (InferenceMode s)
+--   TVDebruijn :: TypeVar NamedDeBruijn -> TypeVariable NamedDeBruijn
+
+-- instance Show (TypeVariable v) where
+--   show = \case
+--     TVAbsurd r -> show r
+--     TVInference r -> show $ unsafeReadSTRef r
+--     TVDebruijn dbj -> show dbj
+
+-- instance Eq (TypeVariable v) where
+--   (TVAbsurd l) == (TVAbsurd r) = l == r
+--   (TVInference l) == (TVInference r) = l == r
+--   (TVDebruijn l) == (TVDebruijn r) = l == r
+
+-- data RowVariable v where
+--   RVAbsurd :: Void -> RowVariable Void
+--   RVInference :: STRef s (RowRef (InferenceMode s)) -> RowVariable (InferenceMode s)
+--   RVDebruijn :: TypeVar NamedDeBruijn -> RowVariable NamedDeBruijn
+
+-- instance Eq (RowVariable v) where
+--   (RVAbsurd l) == (RVAbsurd r) = l == r
+--   (RVInference l) == (RVInference r) = l == r
+--   (RVDebruijn l) == (RVDebruijn r) = l == r
+
+-- data ModRefVariable v where
+--   MVAbsurd :: Void -> ModRefVariable Void
+--   MVInference :: STRef s (RowRef (InferenceMode s)) -> ModRefVariable (InferenceMode s)
+--   MVDebruijn :: TypeVar NamedDeBruijn -> ModRefVariable NamedDeBruijn
+
+-- instance Eq (ModRefVariable v) where
+--   (MVAbsurd l) == (MVAbsurd r) = l == r
+--   (MVInference l) == (MVInference r) = l == r
+--   (MVDebruijn l) == (MVDebruijn r) = l == r
 
 data Type n
   = TyPrim PrimType
@@ -108,14 +194,20 @@ data Type n
   | TyList (Type n)
   | TyObject (RowTy n)
   | TyTable (RowTy n)
-  | TyModRef (Set ModuleName)
+  | TyModRef (MRef n)
   | TyCapToken -- (CapRef n) -- todo: capref is useful for FV but for now exclude it
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable, Generic)
 
-data CapRef n
-  = CapVar n
-  | CapConcrete QualifiedName
+data MRef n
+  = MRefVar n
+  | MConcrete (S.Set ModuleName)
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable, Generic)
+
+instance Pretty n => Pretty (MRef n) where
+  pretty = \case
+    MRefVar n -> pretty n
+    MConcrete mns ->
+      Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> S.toList mns))
 
 data RowTy n
   = RowVar n
@@ -144,6 +236,7 @@ instance Plated (Type n) where
 data PactKind
   = TyKind
   | RowKind
+  | ModRefKind
   deriving (Show, Eq, Ord)
 
 data Schema
@@ -154,6 +247,7 @@ instance Pretty PactKind where
   pretty = \case
     TyKind -> "TYPE"
     RowKind -> "ROW"
+    ModRefKind -> "REFERENCE"
 
 data TypeVar n
   = TypeVar
@@ -181,13 +275,8 @@ pattern RowVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
 pattern RowVariable ix a = TypeVar (NamedDeBruijn ix a) RowKind
 pattern TypeVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
 pattern TypeVariable ix a = TypeVar (NamedDeBruijn ix a) TyKind
--- pattern UserDefVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
--- pattern UserDefVariable ix a = TypeVar (NamedDeBruijn ix a) UserDefKind
-
-instance Pretty n => Pretty (CapRef n) where
-  pretty = \case
-    CapVar n -> pretty n
-    CapConcrete qn -> pretty qn
+pattern MRefVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
+pattern MRefVariable ix a = TypeVar (NamedDeBruijn ix a) ModRefKind
 
 instance Pretty n => Pretty (RowTy n) where
   pretty = \case
@@ -214,8 +303,7 @@ instance Pretty n => Pretty (Type n) where
       "table" <> Pretty.braces (pretty m)
       -- Pretty.braces (Pretty.hsep (prettyObj <$> (M.toList m)))
     TyModRef mn ->
-      let mns = Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> S.toList mn))
-      in "module" <> Pretty.braces mns
+      "module" <> Pretty.braces (pretty mn)
     TyCapToken -> "cap-token"
 
 
@@ -233,13 +321,12 @@ data BuiltinTC n
   | EqRow (RowTy n)
   | RoseSubRow (RoseRow n) (RoseRow n)
   | RoseRowEq (RoseRow n) (RoseRow n)
-  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
-
+  deriving (Show, Eq, Generic)
 
 data RoseRow n
   = RoseRowTy (RowTy n)
   | RoseRowCat (RoseRow n) (RoseRow n)
-  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+  deriving (Show, Eq, Generic)
 
 instance Pretty ty => Pretty (RoseRow ty) where
   pretty = \case
@@ -299,19 +386,16 @@ instance (Pretty ty) => Pretty (BuiltinTC ty) where
       pretty l <+> "~" <+> pretty r
 
 -- Note, no superclasses, for now
-newtype Pred tv
-  = Pred { _typeclassPredicate :: BuiltinTC tv }
-  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
-
-makeLenses ''Pred
-
-instance Pretty ty => Pretty (Pred ty) where
-  pretty (Pred ty) = pretty ty
-
+type Pred i tv = Located i (BuiltinTC tv)
 
 data TypeScheme tv =
-  TypeScheme [tv] [Pred tv]  (Type tv)
+  TypeScheme [tv] [BuiltinTC tv]  (Type tv)
   deriving (Show, Eq, Generic)
+
+data DefnType tv =
+  IndexedDefpactStepType (IntMap (Type Void))
+  | NotIndexed (TypeScheme tv)
+  deriving Show
 
 instance Pretty Schema where
   pretty (Schema _qn tys) =
@@ -377,14 +461,13 @@ returnType f = \case
   a -> f a
 
 instance NFData PrimType
+instance NFData n => NFData (MRef n)
 instance NFData ty => NFData (RowTy ty)
-instance NFData ty => NFData (CapRef ty)
 instance NFData ty => NFData (Type ty)
 instance NFData Schema
-deriving newtype instance NFData ty => NFData (Pred ty)
 instance NFData name => NFData (RoseRow name)
 instance NFData name => NFData (BuiltinTC name)
-instance NFData tyname => NFData (TypeScheme tyname)
+instance (NFData tyname) => NFData (TypeScheme tyname)
 -- instance NFData ty => NFData (Arg ty)
 
 -- makeLenses ''Arg

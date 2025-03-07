@@ -24,7 +24,7 @@
 -- HM type inference for core IR.
 --
 module Pact.Core.Typed.Infer
-  (typecheckModule
+  ( typecheckModule
   , TypecheckError(..)
   , TypecheckFailure(..)
   )
@@ -42,7 +42,7 @@ import Control.Monad.Except
 import Data.Void
 -- import Data.Dynamic (Typeable)
 import Data.RAList(RAList)
-import Data.List (nub)
+import Data.List (nubBy)
 import Data.Foldable(traverse_, foldlM)
 import Data.Default
 import Data.STRef
@@ -52,6 +52,7 @@ import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 
 import qualified Data.Map.Strict as M
+import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.RAList as RAList
@@ -65,13 +66,13 @@ import Pact.Core.Typed.Term
 import Pact.Core.Typed.Type
 import Pact.Core.PactValue
 import Pact.Core.Hash
+import Pact.Core.Info
 
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Type as IR
 import qualified Pact.Core.Typed.Term as Typed
 import Pact.Core.Environment
-
-import Debug.Trace
+import Pact.Core.Capabilities
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -84,7 +85,7 @@ type UniqueSupply s = STRef s Unique
 type Level = Int
 type TCTypeVar s = TypeVar (TvRef s)
 type TCType s = Type (TCTypeVar s)
-type TCPred s = Pred (TCTypeVar s)
+type TCPred i s = Pred i (TCTypeVar s)
 type TCRowCtor s = RowTy (TCTypeVar s)
 type TCRoseRow s = RoseRow (TCTypeVar s)
 
@@ -93,7 +94,7 @@ data Tv s
   | Bound !Text !Unique
   | LinkTy !(TCType s)
   | LinkRow !(RowTy (TCTypeVar s))
-  -- | LinkCap !(CapRef (TCTypeVar s))
+  | LinkRef !(S.Set ModuleName)
   deriving (Eq)
 
 -- Note: TyVar equality
@@ -102,36 +103,45 @@ newtype TvRef s =
   TvRef (STRef s (Tv s))
   deriving (Eq)
 
+data StepContext
+  = NotInStep
+  | StepIndex Int
+  deriving (Eq, Show, Ord)
 
-data TCEnv s b i
+
+data TCEnv s
   = TCEnv
   { _tcSupply :: UniqueSupply s
   -- ^ Supply for fresh variables.
   , _tcVarEnv :: RAList (TypeScheme (TCTypeVar s))
   -- ^ Builtins map, that uses the enum instance
   , _tcLevel :: STRef s Level
+  -- ^ our mem region "level"
+  , _tcStepCtx :: StepContext
+  , _tcInBranch :: Bool
   }
 
 makeLenses ''TCEnv
 
-data TCState b i
+data TCState i
   = TCState
-  { _tcFree :: Map FullyQualifiedName (TypeScheme (TypeVar NamedDeBruijn))
-  , _tcInterfaces :: Map ModuleName (Interface Void i)
+  { _tcFree :: Map FullyQualifiedName (DefnType (TypeVar NamedDeBruijn))
+  , _tcInterfaceDefns :: Map QualifiedName (Located i (Type Void))
+  , _tcYieldTy :: Maybe (Type Void)
   }
   deriving Show
   -- ^ Free variables
 
-instance Default (TCState b i) where
-  def = TCState mempty mempty
+instance Default (TCState i) where
+  def = TCState mempty mempty Nothing
 
 makeLenses ''TCState
 
 -- | Term emitted by desugar
-type IRTerm b i = IR.Term Name IR.Type b i
-type IRTopLevel b i = IR.TopLevel Name IR.Type b i
-type IRModule b i = IR.Module Name IR.Type b i
-type IRInterface b i = IR.Interface Name b i
+type IRTerm b i = IR.EvalTerm b i
+type IRTopLevel b i = IR.EvalTopLevel b i
+type IRModule b i = IR.EvalModule b i
+type IRInterface b i = IR.EvalInterface b i
 
 -- | Term emitted by the typechecker prior to final generalization/unification.
 type TCTerm s b i = Term Name (TCTypeVar s) b i
@@ -159,13 +169,15 @@ type TypedModule b i = Module Name DebruijnTypeVar b i
 type TypedInterface b i = Interface DebruijnTypeVar i
 
 data TypecheckError i =
-  TypecheckError TypecheckFailure i
+  TypecheckError (TypecheckFailure i) i
   deriving (Show, Eq)
 
-data TypecheckFailure
-  = UnificationFailure (Type Text) (Type Text)
+data TypecheckFailure i
+  = UnificationFailure (Located i (Type Text)) (Located i (Type Text))
+  | RowUnificationFailure (Located i (RowTy Text)) (Located i (RowTy Text))
   | InvariantRowInTypeVarPosition (RowTy Text)
   | InvariantTypeInRowVarPosition (Type Text)
+  | InvariantModRefInPosition (MRef Text)
   | InvariantUnboundTypeVariable Text
   | InvariantUnboundTermVariable Text
   | InvariantUnboundFreeVariable FullyQualifiedName
@@ -174,22 +186,30 @@ data TypecheckFailure
   | ModuleImplementsNoInterfaces ModuleName
   | ModuleLacksImplementedInterfaces ModuleName (S.Set ModuleName)
   | WrongKind PactKind
-  | InfiniteType (Type Text) (Type Text)
+  | InfiniteType (Located i (Type Text)) (Located i (Type Text))
   | InfiniteRow (RowTy Text) (RowTy Text)
   | DisallowedGenericSignature (Type Text)
-  | CannotResolveConstraints [Pred Text]
+  | CannotUnifyWithBoundVariable Text
+  | CannotResolveConstraints [Pred i Text]
+  | CannotStaticallyDetermineRowOpSig Text
+  | ArgumentRequiresTypeAnnotation
+  | InvalidDefcapManagerFun (Located i (Type Void)) (Located i (Type Void))
+  | ModuleReferenceNotRefined Name
+  | ModuleReferenceDoesNotHaveMatchingFunction Name
+  | TypecheckingDoesNotSupportType IR.Type
+  | DefPactStepIndexOutOfBounds Int
   deriving (Show, Eq)
 
 -- | Our inference monad, where we can plumb through generalization "regions",
 -- our variable environment and our "supply" of unique names
-newtype InferM s b i a =
-  InferM (ExceptT (TypecheckError i) (ReaderT (TCEnv s b i) (StateT (TCState b i) (ST s))) a)
+newtype InferM s i a =
+  InferM (ExceptT (TypecheckError i) (ReaderT (TCEnv s) (StateT (TCState i) (ST s))) a)
   deriving
     ( Functor, Applicative, Monad
-    , MonadReader (TCEnv s b i)
-    , MonadState (TCState b i)
+    , MonadReader (TCEnv s)
+    , MonadState (TCState i)
     , MonadError (TypecheckError i))
-  via (ExceptT (TypecheckError i) (ReaderT (TCEnv s b i) (StateT (TCState b i) (ST s))))
+  via (ExceptT (TypecheckError i) (ReaderT (TCEnv s) (StateT (TCState i) (ST s))))
 
 data SpecialOverload
   = AddOverload
@@ -207,21 +227,57 @@ coreBuiltinToSpecialOverload = \case
 toSpecialOverload :: AsCoreBuiltin b => b -> Maybe SpecialOverload
 toSpecialOverload b = preview _CoreBuiltin b >>= coreBuiltinToSpecialOverload
 
+lookupDefnType :: i -> FullyQualifiedName -> InferM s i (TypeScheme DebruijnTypeVar)
+lookupDefnType info fqn =
+  use (tcFree . at fqn) >>= \case
+  Just defnTy -> case defnTy of
+    NotIndexed t -> pure t
+    -- `IndexedDefpactStepType` guarantees at least 1 step exists
+    -- so IntMap.! 0 is safe
+    IndexedDefpactStepType im -> view tcStepCtx >>= \case
+      NotInStep -> pure $ NonGeneric $ liftType (im IntMap.! 0)
+      StepIndex i -> case IntMap.lookup i im of
+        Just ty -> pure $ NonGeneric $ liftType ty
+        Nothing -> throwTypecheckError info (DefPactStepIndexOutOfBounds i)
+  _ ->
+    throwTypecheckError info $ InvariantUnboundFreeVariable fqn
+
 specialOverLoadToCoreBuiltin :: SpecialOverload -> CoreBuiltin
 specialOverLoadToCoreBuiltin = \case
   AddOverload -> CoreAdd
   AccessOverload -> CoreAt
   FormatOverload -> CoreFormat
 
+liftCoreType :: i -> IR.Type -> InferM s i (Type a)
+liftCoreType i = \case
+  IR.TyPrim p -> pure $ TyPrim (fromCorePrimType p)
+  IR.TyList t ->
+    TyList <$> liftCoreType i t
+  IR.TyModRef mns -> pure $ TyModRef (MConcrete mns)
+  IR.TyObject (IR.Schema _qn m) ->
+    TyObject . RowConcrete <$> traverse (liftCoreType i) m
+  IR.TyTable (IR.Schema _qn m) ->
+    TyTable . RowConcrete <$> traverse (liftCoreType i) m
+  IR.TyCapToken -> pure TyCapToken
+  t -> throwTypecheckError i (TypecheckingDoesNotSupportType t)
+
+-- | A bit of an annoying workaround for the fact that
+--   `ensureWellKinded` doesn't provide us a proof that a particular
+--   type variable is well kinded, which forces us to handle pattern matches
+--   for `LinkRow` and `LinkRef` that are handled.
+wellKindedGuaranteed :: InferM s i a
+wellKindedGuaranteed = error "well-kindedness guaranteed by enforceWellKinded"
+
 class (AsCoreBuiltin b, Show b) => TypeOfBuiltin b where
-  typeOfBuiltin :: b -> TypeScheme DebruijnTypeVar
+  typeOfBuiltin :: i -> b -> InferM s i (TypeScheme DebruijnTypeVar)
 
 instance TypeOfBuiltin CoreBuiltin where
-  typeOfBuiltin = \case
+  typeOfBuiltin :: i -> CoreBuiltin -> InferM s i (TypeScheme DebruijnTypeVar)
+  typeOfBuiltin info = \case
     -- Add
     -- (+) : forall a. Add a => a -> a -> a
     CoreAdd ->
-      addBinopType
+      pure $ addBinopType
     -- Num
     -- (-) : forall a. Num a => a -> a -> a
     -- (*) : forall a. Num a => a -> a -> a
@@ -230,41 +286,41 @@ instance TypeOfBuiltin CoreBuiltin where
     -- abs : forall a. Num a => a -> a
     -- (^) : forall a. Num a => a -> a -> a
     CoreSub ->
-      numBinopType
+      pure numBinopType
     CoreMultiply ->
-      numBinopType
+      pure numBinopType
     CoreDivide ->
-      numBinopType
+      pure numBinopType
     CoreNegate ->
-      unaryNumType
+      pure unaryNumType
     CoreAbs ->
-      unaryNumType
+      pure unaryNumType
     CorePow ->
-      numBinopType
+      pure numBinopType
     -- Boolean ops
     -- not : bool -> bool
     CoreNot ->
-      NonGeneric (TyBool :~> TyBool)
+      pure $ NonGeneric (TyBool :~> TyBool)
     -- Equality
     -- (=) : forall a. Eq a => a -> a -> bool
     -- (!=) : forall a. Eq a => a -> a -> bool
     CoreEq ->
-      eqTyp
+      pure eqTyp
     CoreNeq ->
-      eqTyp
+      pure eqTyp
     -- Ord
     -- (>) : forall a. Ord a => a -> a -> bool
     -- (>=) : forall a. Ord a => a -> a -> bool
     -- (<) : forall a. Ord a => a -> a -> bool
     -- (<=) : forall a. Ord a => a -> a -> bool
     CoreGT ->
-      ordTyp
+      pure ordTyp
     CoreGEQ ->
-      ordTyp
+      pure ordTyp
     CoreLT ->
-      ordTyp
+      pure ordTyp
     CoreLEQ ->
-      ordTyp
+      pure ordTyp
     -- Integer ops
     -- (&) : integer -> integer -> integer
     -- (|) : integer -> integer -> integer
@@ -273,17 +329,17 @@ instance TypeOfBuiltin CoreBuiltin where
     -- shift : integer -> integer -> integer
     -- mod : integer -> integer -> integer
     CoreBitwiseAnd ->
-      binaryInt
+      pure binaryInt
     CoreBitwiseOr ->
-      binaryInt
+      pure binaryInt
     CoreBitwiseXor ->
-      binaryInt
+      pure binaryInt
     CoreBitwiseFlip ->
-      unaryInt
+      pure unaryInt
     CoreBitShift ->
-      binaryInt
+      pure binaryInt
     CoreMod ->
-      binaryInt
+      pure binaryInt
     -- Rounding functions
     -- round : decimal -> integer
     -- ceiling : decimal -> integer
@@ -292,326 +348,325 @@ instance TypeOfBuiltin CoreBuiltin where
     -- round-prec : decimal -> integer -> decimal
     -- ceiling-prec : decimal -> integer -> decimal
     -- floor-prec : decimal -> integer -> decimal
-    CoreRound -> roundingFn
-    CoreCeiling -> roundingFn
-    CoreFloor -> roundingFn
-    CoreRoundPrec -> roundingPrecFn
-    CoreCeilingPrec -> roundingPrecFn
-    CoreFloorPrec -> roundingPrecFn
+    CoreRound -> pure roundingFn
+    CoreCeiling -> pure roundingFn
+    CoreFloor -> pure roundingFn
+    CoreRoundPrec -> pure roundingPrecFn
+    CoreCeilingPrec -> pure roundingPrecFn
+    CoreFloorPrec -> pure roundingPrecFn
     -- Fractional
     -- exp : forall a. Fractional a -> a -> decimal
     -- ln : forall a. Fractional a -> a -> decimal
     -- sqrt : forall a. Fractional a -> a -> decimal
     -- log-base : forall a. Fractional a -> a -> a -> decimal
     CoreExp ->
-      unaryFractional
+      pure unaryFractional
     CoreLn ->
-      unaryFractional
+      pure unaryFractional
     CoreSqrt ->
-      unaryFractional
-    CoreLogBase ->
-      let aVar = nd "a" 0
+      pure unaryFractional
+    CoreLogBase -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Fractional a)] (a :~> a :~> a)
+      pure $ TypeScheme [aVar] [Fractional a] (a :~> a :~> a)
     -- ListLike
-    CoreLength ->
-      let aVar = nd "a" 0
+    CoreLength -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (ListLike a)] (a :~> TyInt)
-    CoreTake -> takeDropTy
-    CoreDrop -> takeDropTy
+      pure $ TypeScheme [aVar] [ListLike a] (a :~> TyInt)
+    CoreTake -> pure takeDropTy
+    CoreDrop -> pure takeDropTy
     CoreConcat ->
-      NonGeneric (TyList TyString :~> TyString)
-    CoreReverse ->
-      let aVar = nd "a" 0
+      pure $ NonGeneric (TyList TyString :~> TyString)
+    CoreReverse -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [] (TyList a :~> TyList a)
+      pure $ TypeScheme [aVar] [] (TyList a :~> TyList a)
     -- general
-    CoreMap ->
-      let aVar = nd "a" 1
-          bVar = nd "b" 0
+    CoreMap -> do
+      let aVar = TypeVariable 1 "a"
+          bVar = TypeVariable 0 "b"
           a = TyVar aVar
           b = TyVar bVar
-      in TypeScheme [aVar, bVar] [] ((a :~> b) :~> TyList a :~> TyList b)
-    CoreFilter ->
-      let aVar = nd "a" 0
+      pure $ TypeScheme [aVar, bVar] [] ((a :~> b) :~> TyList a :~> TyList b)
+    CoreFilter -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [] ((a :~> TyBool) :~> TyList a :~> TyList a)
-    CoreContains ->
-      let aVar = nd "a" 0
+      pure $ TypeScheme [aVar] [] ((a :~> TyBool) :~> TyList a :~> TyList a)
+    CoreContains -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Eq a)] (a :~> TyList a :~> TyBool)
-    CoreSort ->
-      let aVar = nd "a" 0
+      pure $ TypeScheme [aVar] [Eq a] (a :~> TyList a :~> TyBool)
+    CoreSort -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Ord a)] (TyList a :~> TyList a)
+      pure $ TypeScheme [aVar] [Ord a] (TyList a :~> TyList a)
     CoreSortObject ->
-      error "todo: sort-object not supported by the typechecker"
+      throwTypecheckError info $ CannotStaticallyDetermineRowOpSig "sort"
     CoreRemove ->
-      error "todo: remove not supported by the typechecker"
+      throwTypecheckError info $ CannotStaticallyDetermineRowOpSig "remove"
     -- CoreIf -> "if"
     CoreIntToStr ->
-      NonGeneric (TyInt :~> TyInt :~> TyString)
+      pure $ NonGeneric (TyInt :~> TyInt :~> TyString)
     CoreStrToInt ->
-      NonGeneric (TyString :~> TyInt)
+      pure $ NonGeneric (TyString :~> TyInt)
     CoreStrToIntBase ->
-      NonGeneric (TyInt :~> TyString :~> TyInt)
-    CoreFold ->
-      let aVar = nd "a" 1
-          bVar = nd "b" 0
+      pure $ NonGeneric (TyInt :~> TyString :~> TyInt)
+    CoreFold -> do
+      let aVar = TypeVariable 1 "a"
+          bVar = TypeVariable 0 "b"
           a = TyVar aVar
           b = TyVar bVar
-      in TypeScheme [aVar, bVar] [] ((a :~> b :~> a) :~> a :~> TyList b :~> a)
-    CoreZip ->
-      let aVar = nd "a" 2
+      pure $ TypeScheme [aVar, bVar] [] ((a :~> b :~> a) :~> a :~> TyList b :~> a)
+    CoreZip -> do
+      let aVar = TypeVariable 2 "a"
           a = TyVar aVar
-          bVar = nd "b" 1
+          bVar = TypeVariable 1 "b"
           b = TyVar bVar
-          cVar = nd "c" 0
+          cVar = TypeVariable 0 "c"
           c = TyVar cVar
-      in TypeScheme [aVar, bVar, cVar] [] ((a :~> b :~> c) :~> TyList a :~> TyList b :~> TyList c)
-    CoreDistinct ->
-      let aVar = nd "a" 0
+      pure $ TypeScheme [aVar, bVar, cVar] [] ((a :~> b :~> c) :~> TyList a :~> TyList b :~> TyList c)
+    CoreDistinct -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Ord a)] (TyList a :~> TyList a)
+      pure $ TypeScheme [aVar] [Ord a] (TyList a :~> TyList a)
     CoreFormat ->
-      TypeScheme [] [] (TyString :~> TyList TyString :~> TyString)
+      pure $ NonGeneric (TyString :~> TyList TyString :~> TyString)
     CoreEnumerate ->
-      NonGeneric (TyInt :~> TyInt :~> TyList TyInt)
+      pure $ NonGeneric (TyInt :~> TyInt :~> TyList TyInt)
     CoreEnumerateStepN ->
-      NonGeneric (TyInt :~> TyInt :~> TyList TyInt)
-    CoreShow ->
-      let aVar = nd "a" 0
+      pure $ NonGeneric (TyInt :~> TyInt :~> TyList TyInt)
+    CoreShow -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Show a)] (a :~> TyString)
-    CoreReadMsg ->
-      let aVar = nd "a" 0
+      pure $ TypeScheme [aVar] [Show a] (a :~> TyString)
+    CoreReadMsg -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [] (TyString :~> a)
-    CoreReadMsgDefault ->
-      let aVar = nd "a" 0
+      pure $ TypeScheme [aVar] [] (TyString :~> a)
+    CoreReadMsgDefault -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [] (TyNullary a)
+      pure $ TypeScheme [aVar] [] (TyNullary a)
     CoreReadInteger ->
-      NonGeneric (TyString :~> TyInt)
+      pure $ NonGeneric (TyString :~> TyInt)
     CoreReadDecimal ->
-      NonGeneric (TyString :~> TyDecimal)
+      pure $ NonGeneric (TyString :~> TyDecimal)
     CoreReadString ->
-      NonGeneric (TyString :~> TyString)
+      pure $ NonGeneric (TyString :~> TyString)
     CoreReadKeyset ->
-      NonGeneric (TyString :~> TyGuard)
-    CoreEnforceGuard ->
-      let aVar = nd "a" 0
+      pure $ NonGeneric (TyString :~> TyGuard)
+    CoreEnforceGuard -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (EnforceRead a)] (a :~> TyBool)
-    CoreEnforceKeyset ->
-      let aVar = nd "a" 0
+      pure $ TypeScheme [aVar] [EnforceRead a] (a :~> TyBool)
+    CoreEnforceKeyset -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (EnforceRead a)] (a :~> TyBool)
+      pure $ TypeScheme [aVar] [EnforceRead a] (a :~> TyBool)
     CoreKeysetRefGuard ->
-      NonGeneric (TyString :~> TyGuard)
+      pure $ NonGeneric (TyString :~> TyGuard)
     CoreCreateCapabilityGuard ->
-      TypeScheme [] [] (TyCapToken :~> TyGuard)
+      pure $ TypeScheme [] [] (TyCapToken :~> TyGuard)
     CoreCreateCapabilityPactGuard ->
-      TypeScheme [] [] (TyCapToken :~> TyGuard)
+      pure $ TypeScheme [] [] (TyCapToken :~> TyGuard)
     CoreCreateModuleGuard ->
-      NonGeneric (TyString :~> TyGuard)
+      pure $ NonGeneric (TyString :~> TyGuard)
     CoreCreateDefPactGuard ->
-      NonGeneric (TyString :~> TyGuard)
+      pure $ NonGeneric (TyString :~> TyGuard)
     -- todo: object access within `At`
-    CoreAt ->
-      let aVar = nd "a" 0
+    CoreAt -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [] (TyInt :~> TyList a :~> a)
-    CoreMakeList ->
-      let aVar = nd "a" 0
+      pure $ TypeScheme [aVar] [] (TyInt :~> TyList a :~> a)
+    CoreMakeList -> do
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [] (TyInt :~> a :~> TyList a)
+      pure $ TypeScheme [aVar] [] (TyInt :~> a :~> TyList a)
     CoreB64Encode ->
-      NonGeneric (TyString :~> TyString)
+      pure $ NonGeneric (TyString :~> TyString)
     CoreB64Decode ->
-      NonGeneric (TyString :~> TyString)
+      pure $ NonGeneric (TyString :~> TyString)
     CoreStrToList ->
-      NonGeneric (TyString :~> TyList TyString)
-    CoreYield ->
+      pure $ NonGeneric (TyString :~> TyList TyString)
+    CoreYield -> do
       let aVar = RowVariable 0 "a"
-      in TypeScheme [aVar] [] (TyObject (RowVar aVar) :~> TyObject (RowVar aVar))
-    CoreYieldToChain ->
+      pure $ TypeScheme [aVar] [] (TyObject (RowVar aVar) :~> TyObject (RowVar aVar))
+    CoreYieldToChain -> do
       let aVar = RowVariable 0 "a"
-      in TypeScheme [aVar] [] (TyObject (RowVar aVar) :~> TyString :~> TyObject (RowVar aVar))
-    CoreResume ->
+      pure $ TypeScheme [aVar] [] (TyObject (RowVar aVar) :~> TyString :~> TyObject (RowVar aVar))
+    CoreResume -> do
       let aVar = RowVariable 1 "a"
           bodyVar = TypeVariable 0 "b"
-      in TypeScheme [aVar, bodyVar] [] ((TyObject (RowVar aVar) :~> TyVar bodyVar) :~> TyVar bodyVar)
-    CoreBind ->
+      pure $ TypeScheme [aVar, bodyVar] [] ((TyObject (RowVar aVar) :~> TyVar bodyVar) :~> TyVar bodyVar)
+    CoreBind -> do
       let aVar = RowVariable 1 "a"
           bodyVar = TypeVariable 0 "b"
-      in TypeScheme [aVar, bodyVar] [] (TyObject (RowVar aVar) :~> (TyObject (RowVar aVar) :~> TyVar bodyVar) :~> TyVar bodyVar)
+      pure $ TypeScheme [aVar, bodyVar] [] (TyObject (RowVar aVar) :~> (TyObject (RowVar aVar) :~> TyVar bodyVar) :~> TyVar bodyVar)
     CoreRequireCapability ->
-      TypeScheme [] [] (TyCapToken :~> TyBool)
+      pure $ NonGeneric (TyCapToken :~> TyBool)
     CoreComposeCapability ->
-      TypeScheme [] [] (TyCapToken :~> TyBool)
+      pure $ TypeScheme [] [] (TyCapToken :~> TyBool)
     CoreInstallCapability ->
-      TypeScheme [] [] (TyCapToken :~> TyString)
+      pure $ TypeScheme [] [] (TyCapToken :~> TyString)
     CoreEmitEvent ->
-      TypeScheme [] [] (TyCapToken :~> TyString)
+      pure $ TypeScheme [] [] (TyCapToken :~> TyString)
     CoreCreateTable ->
-      TypeScheme [] [] (TyCapToken :~> TyString)
+      pure $ TypeScheme [] [] (TyCapToken :~> TyString)
     CoreDescribeKeyset ->
-      TypeScheme [] [] (TyString :~> TyGuard)
-    CoreDescribeModule -> let
-      o = TyObject (RowConcrete schema)
-      in TypeScheme [] [] (TyString :~> o)
+      pure $ TypeScheme [] [] (TyString :~> TyGuard)
+    CoreDescribeModule -> do
+      pure $ NonGeneric (TyString :~> TyObject (RowConcrete schema))
       where
       schema = M.fromList
         [(Field "hash", TyString)
         ,(Field "interfaces", TyList TyString)
         ,(Field "name", TyString)]
-    CoreDescribeTable -> let
-      o = TyObject (RowConcrete schema)
-      in TypeScheme [] [] (TyString :~> o)
+    CoreDescribeTable -> do
+      pure $ NonGeneric (TyString :~> TyObject (RowConcrete schema))
       where
       schema = M.fromList
         [(Field "type", TyString)
         ,(Field "module", TyString)
         ,(Field "name", TyString)]
     CoreDefineKeySet ->
-      NonGeneric (TyString :~> TyGuard :~> TyString)
+      pure $ NonGeneric (TyString :~> TyGuard :~> TyString)
     CoreDefineKeysetData ->
-      NonGeneric (TyString :~> TyString)
+      pure $ NonGeneric (TyString :~> TyString)
     -- fold-db : forall (r: ROW) (out : TYPE)
     --           .  table<r>
     --           -> (string -> object<r> -> bool)
     --           -> (string -> object<r> -> <out>)
     --           -> [<out>]
-    CoreFoldDb -> let
-      rowVar = RowVariable 1 "row"
-      outVar = TypeVariable 0 "a"
-      queryLam = TyString :~> TyObject (RowVar rowVar) :~> TyBool
-      appLam = TyString :~> TyObject (RowVar rowVar) :~> TyVar outVar
-      fnTy = TyTable (RowVar rowVar) :~> queryLam :~> appLam :~> TyList (TyVar outVar)
-      in TypeScheme [rowVar, outVar] [] fnTy
+    CoreFoldDb -> do
+      let rowVar = RowVariable 1 "row"
+          outVar = TypeVariable 0 "a"
+          queryLam = TyString :~> TyObject (RowVar rowVar) :~> TyBool
+          appLam = TyString :~> TyObject (RowVar rowVar) :~> TyVar outVar
+          fnTy = TyTable (RowVar rowVar) :~> queryLam :~> appLam :~> TyList (TyVar outVar)
+      pure $ TypeScheme [rowVar, outVar] [] fnTy
     -- insert : forall (r: ROW) . table<r> -> string -> object<r> -> string
-    CoreInsert -> let
-      rowVar = RowVariable 0 "row"
-      fnTy = TyTable (RowVar rowVar) :~> TyString :~> TyObject (RowVar rowVar) :~> TyString
-      in TypeScheme [rowVar] [] fnTy
-    CoreKeys -> let
-      rowVar = RowVariable 0 "row"
-      fnTy = TyTable (RowVar rowVar) :~> TyList TyString
-      in TypeScheme [rowVar] [] fnTy
-    CoreRead -> let
-      rowVar = RowVariable 0 "row"
-      fnTy = TyTable (RowVar rowVar) :~> TyString :~> TyObject (RowVar rowVar)
-      in TypeScheme [rowVar] [] fnTy
-    CoreSelect -> let
-      rowVar = RowVariable 0 "row"
-      fnTy = TyTable (RowVar rowVar) :~> (TyObject (RowVar rowVar) :~> TyBool) :~> TyList (TyObject (RowVar rowVar))
-      in TypeScheme [rowVar] [] fnTy
+    CoreInsert -> do
+      let rowVar = RowVariable 0 "row"
+          fnTy = TyTable (RowVar rowVar) :~> TyString :~> TyObject (RowVar rowVar) :~> TyString
+      pure $ TypeScheme [rowVar] [] fnTy
+    CoreKeys -> do
+      let rowVar = RowVariable 0 "row"
+          fnTy = TyTable (RowVar rowVar) :~> TyList TyString
+      pure $ TypeScheme [rowVar] [] fnTy
+    CoreRead -> do
+      let rowVar = RowVariable 0 "row"
+          fnTy = TyTable (RowVar rowVar) :~> TyString :~> TyObject (RowVar rowVar)
+      pure $ TypeScheme [rowVar] [] fnTy
+    CoreSelect -> do
+      let rowVar = RowVariable 0 "row"
+          fnTy = TyTable (RowVar rowVar) :~> (TyObject (RowVar rowVar) :~> TyBool) :~> TyList (TyObject (RowVar rowVar))
+      pure $ TypeScheme [rowVar] [] fnTy
     CoreSelectWithFields ->
-      error "todo: not supported"
+      throwTypecheckError info $ CannotStaticallyDetermineRowOpSig "remove"
     -- update : forall (r1: ROW, r2: ROW) . (r2 ≼ r1) => table<r1> -> string -> object<r2> -> string
-    CoreUpdate -> let
-      -- r1
-      r1 = RowVariable 1 "r1"
-      -- r2
-      r2 = RowVariable 0 "r2"
-      -- r1 ≼ r2
-      rowConstr = RoseSubRow (RoseRowTy (RowVar r2)) (RoseRowTy (RowVar r1))
-      --
-      fnTy = TyTable (RowVar r1) :~> TyString :~> TyObject (RowVar r2) :~> TyString
-      in TypeScheme [r1, r2] [Pred rowConstr] fnTy
+    CoreUpdate -> do
+          -- r1
+      let r1 = RowVariable 1 "r1"
+          -- r2
+          r2 = RowVariable 0 "r2"
+          -- r1 ≼ r2
+          rowConstr = RoseSubRow (RoseRowTy (RowVar r2)) (RoseRowTy (RowVar r1))
+          -- table{r1} -> string -> object{r2} -> string
+          fnTy = TyTable (RowVar r1) :~> TyString :~> TyObject (RowVar r2) :~> TyString
+      -- forall (r1: ROW, r2: ROW) . (r2 ≼ r1) => table<r1> -> string -> object<r2> -> string
+      pure $ TypeScheme [r1, r2] [rowConstr] fnTy
     -- with-default-read : forall (r1: ROW) . table<r1> -> string -> object<r1> -> (object<r1> -> a) -> a
-    CoreWithDefaultRead -> let
-      r1 = RowVariable 1 "r1"
-      aVar = TypeVariable 0 "a1"
-      fnTy = TyTable (RowVar r1) :~> TyString :~> TyObject (RowVar r1) :~> (TyObject (RowVar r1) :~> TyVar aVar) :~> TyVar aVar
-      in TypeScheme [r1, aVar] [] fnTy
-    CoreWithRead -> let
-      r1 = RowVariable 1 "r1"
-      aVar = TypeVariable 0 "a1"
-      fnTy = TyTable (RowVar r1) :~> TyString :~> (TyObject (RowVar r1) :~> TyVar aVar) :~> TyVar aVar
-      in TypeScheme [r1, aVar] [] fnTy
-    CoreWrite -> let
-      r1 = RowVariable 0 "r1"
-      fnTy = TyTable (RowVar r1) :~> TyString :~> TyObject (RowVar r1) :~> TyString
-      in TypeScheme [r1] [] fnTy
+    CoreWithDefaultRead -> do
+      let r1 = RowVariable 1 "r1"
+      let aVar = TypeVariable 0 "a1"
+      let fnTy = TyTable (RowVar r1) :~> TyString :~> TyObject (RowVar r1) :~> (TyObject (RowVar r1) :~> TyVar aVar) :~> TyVar aVar
+      pure $ TypeScheme [r1, aVar] [] fnTy
+    CoreWithRead -> do
+      let r1 = RowVariable 1 "r1"
+      let aVar = TypeVariable 0 "a1"
+      let fnTy = TyTable (RowVar r1) :~> TyString :~> (TyObject (RowVar r1) :~> TyVar aVar) :~> TyVar aVar
+      pure $ TypeScheme [r1, aVar] [] fnTy
+    CoreWrite -> do
+      let r1 = RowVariable 0 "r1"
+      let fnTy = TyTable (RowVar r1) :~> TyString :~> TyObject (RowVar r1) :~> TyString
+      pure $ TypeScheme [r1] [] fnTy
     CoreTxHash ->
-      TypeScheme [] [] (TyNullary TyString)
-    CoreAndQ -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-        cloTy = a :~> TyBool
-      in TypeScheme [aVar] [] (cloTy :~> cloTy :~> a :~> TyBool)
-    CoreOrQ -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-        cloTy = a :~> TyBool
-      in TypeScheme [aVar] [] (cloTy :~> cloTy :~> a :~> TyBool)
+      pure $ NonGeneric (TyNullary TyString)
+    CoreAndQ -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      let cloTy = a :~> TyBool
+      pure $ TypeScheme [aVar] [] (cloTy :~> cloTy :~> a :~> TyBool)
+    CoreOrQ -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      let cloTy = a :~> TyBool
+      pure $ TypeScheme [aVar] [] (cloTy :~> cloTy :~> a :~> TyBool)
     CoreWhere ->
-      error "where must be pattern matched"
-    CoreNotQ -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-        cloTy = a :~> TyBool
-      in TypeScheme [aVar] [] (cloTy :~> a :~> TyBool)
-    CoreHash -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-      in TypeScheme [aVar] [Pred (IsValue a)] (a :~> TyString)
+      throwTypecheckError info $ CannotStaticallyDetermineRowOpSig "where"
+    CoreNotQ -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      let cloTy = a :~> TyBool
+      pure $ TypeScheme [aVar] [] (cloTy :~> a :~> TyBool)
+    CoreHash -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      pure $ TypeScheme [aVar] [IsValue a] (a :~> TyString)
     -- note: continue is basically the indentity function
-    CoreContinue -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-      in TypeScheme [aVar] [] (a :~> a)
+    CoreContinue -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      pure $ TypeScheme [aVar] [] (a :~> a)
     CoreParseTime ->
-      TypeScheme [] [] (TyString :~> TyString :~> TyTime)
+      pure $ NonGeneric (TyString :~> TyString :~> TyTime)
     CoreFormatTime ->
-      TypeScheme [] [] (TyString :~> TyTime :~> TyString)
+      pure $ NonGeneric (TyString :~> TyTime :~> TyString)
     CoreTime ->
-      TypeScheme [] [] (TyString :~> TyTime)
-    CoreAddTime -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Num a)] (TyTime :~> a :~> TyTime)
+      pure $ NonGeneric (TyString :~> TyTime)
+    CoreAddTime -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      pure $ TypeScheme [aVar] [Num a] (TyTime :~> a :~> TyTime)
     CoreDiffTime ->
-      TypeScheme [] [] (TyTime :~> TyTime :~> TyDecimal)
-    CoreHours -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Num a)] (a :~> TyDecimal)
-    CoreMinutes -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Num a)] (a :~> TyDecimal)
-    CoreDays -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Num a)] (a :~> TyDecimal)
-    CoreCompose -> let
-        aVar = TypeVariable 2 "a"
-        bVar = TypeVariable 1 "b"
-        cVar = TypeVariable 0 "c"
-        a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Num a)]
+      pure $ NonGeneric (TyTime :~> TyTime :~> TyDecimal)
+    CoreHours -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      pure $ TypeScheme [aVar] [Num a] (a :~> TyDecimal)
+    CoreMinutes -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      pure $ TypeScheme [aVar] [Num a] (a :~> TyDecimal)
+    CoreDays -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      pure $ TypeScheme [aVar] [Num a] (a :~> TyDecimal)
+    CoreCompose -> do
+      let aVar = TypeVariable 2 "a"
+      let bVar = TypeVariable 1 "b"
+      let cVar = TypeVariable 0 "c"
+      let a = TyVar aVar
+      pure $ TypeScheme [aVar] [Num a]
           ((TyVar aVar :~> TyVar bVar)
             :~> (TyVar bVar :~> TyVar cVar)
             :~> TyVar aVar
             :~> TyVar cVar)
     CoreCreatePrincipal ->
-      TypeScheme [] [] (TyGuard :~> TyString)
+      pure $ NonGeneric (TyGuard :~> TyString)
     CoreIsPrincipal ->
-      TypeScheme [] [] (TyString :~> TyBool)
+      pure $ NonGeneric (TyString :~> TyBool)
     CoreTypeOfPrincipal ->
-      TypeScheme [] [] (TyString :~> TyString)
+      pure $ NonGeneric (TyString :~> TyString)
     CoreValidatePrincipal ->
-      TypeScheme [] [] (TyGuard :~> TyString :~> TyBool)
+      pure $ NonGeneric (TyGuard :~> TyString :~> TyBool)
     CoreNamespace ->
-      TypeScheme [] [] (TyString :~> TyString)
+      pure $ NonGeneric (TyString :~> TyString)
     CoreDefineNamespace ->
-      TypeScheme [] [] (TyString :~> TyGuard :~> TyGuard :~> TyString)
-    CoreDescribeNamespace -> let
-      in TypeScheme [] [] (TyString :~> TyObject (RowConcrete schema))
+      pure $ NonGeneric (TyString :~> TyGuard :~> TyGuard :~> TyString)
+    CoreDescribeNamespace ->
+      pure $ NonGeneric  (TyString :~> TyObject (RowConcrete schema))
       where
       schema = M.fromList
         [ (Field "admin-guard", TyGuard)
@@ -626,48 +681,94 @@ instance TypeOfBuiltin CoreBuiltin where
     CorePoseidonHashHackachain ->
       error "todo: support function"
     CoreChainData ->
-      TypeScheme [] [] (TyNullary (TyObject (RowConcrete chainDataSchema)))
+      pure $ NonGeneric (TyNullary (TyObject (RowConcrete chainDataSchema)))
     CoreIsCharset ->
-      TypeScheme [] [] (TyInt :~> TyString :~> TyBool)
+      pure $ NonGeneric (TyInt :~> TyString :~> TyBool)
     CorePactId ->
-      TypeScheme [] [] (TyNullary TyString)
-    CoreTypeOf -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-        in TypeScheme [aVar] [Pred (IsValue a)] (a :~> TyString)
+      pure $ NonGeneric (TyNullary TyString)
+    CoreTypeOf -> do
+        let aVar = TypeVariable 0 "a"
+        let a = TyVar aVar
+        pure $ TypeScheme [aVar] [IsValue a] (a :~> TyString)
     CoreDec ->
-      TypeScheme [] [] (TyInt :~> TyDecimal)
-    CoreCond -> let
-        aVar = nd "a" 0
-        a = TyVar aVar
-      in TypeScheme [aVar] [] (TyNullary a :~> a)
-    _ -> error "stubbed"
+      pure $ NonGeneric (TyInt :~> TyDecimal)
+    CoreCond -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      pure $ TypeScheme [aVar] [] (TyNullary a :~> a)
+    CoreIdentity -> do
+      let aVar = TypeVariable 0 "a"
+      let a = TyVar aVar
+      pure $ TypeScheme [aVar] [] (TyNullary a :~> a)
+    CoreVerifySPV -> do
+      let aVar = RowVariable 0 "a"
+      pure $ TypeScheme [aVar] [] (TyString :~> TyObject (RowVar aVar) :~> TyObject (RowVar aVar))
+    CoreEnforceVerifier ->
+      pure $ NonGeneric (TyString :~> TyBool)
+    CoreAcquireModuleAdmin -> do
+      let aVar = MRefVariable 0 "a"
+      pure $ TypeScheme [aVar] [] (TyModRef (MRefVar aVar) :~> TyString)
+    CoreReadWithFields ->
+      throwTypecheckError info $ CannotStaticallyDetermineRowOpSig "read"
+    CoreListModules ->
+      pure $ NonGeneric (TyNullary (TyList TyString))
+    CoreStaticRedeploy -> do
+      pure $ NonGeneric (TyString :~> TyUnit)
+    CoreHashKeccak256 -> do
+      pure $ NonGeneric (TyList TyString :~> TyString)
+    CoreHashPoseidon ->
+      pure $ NonGeneric (TyList TyInt :~> TyInt)
+    CoreHyperlaneMessageId ->
+      pure $ NonGeneric (TyObject (RowConcrete hyperlaneMsgObjectSchema) :~> TyString)
+    CoreHyperlaneDecodeMessage ->
+      pure $ NonGeneric (TyString :~> TyObject (RowConcrete schema))
+      where
+      schema = M.fromList
+        [ (Field "recipient", TyGuard)
+        , (Field "amount", TyDecimal)
+        , (Field "chaindId", TyString)
+        ]
+    CoreHyperlaneEncodeMessage ->
+      pure $ NonGeneric (TyObject (RowConcrete hyperlaneTokenMsgSchema) :~> TyString)
     where
-    nd = flip TypeVariable
+    hyperlaneTokenMsgSchema = M.fromList
+      [ (Field "recipient", TyGuard)
+      , (Field "amount", TyDecimal)
+      , (Field "chaindId", TyString)
+      ]
+    hyperlaneMsgObjectSchema = M.fromList
+      [ (Field "version", TyInt)
+      , (Field "nonce", TyInt)
+      , (Field "originDomain", TyInt)
+      , (Field "sender", TyString)
+      , (Field "destinationDomain", TyInt)
+      , (Field "recipient", TyString)
+      , (Field "messageBody", TyString)
+      ]
     unaryNumType =
-      let aVar = nd "a" 0
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Num a)] (a :~> a)
+      in TypeScheme [aVar] [Num a] (a :~> a)
     unaryFractional =
-      let aVar = nd "a" 0
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Fractional a)] (a :~> TyDecimal)
+      in TypeScheme [aVar] [Fractional a] (a :~> TyDecimal)
     addBinopType =
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Add a)] (a :~> a :~> a)
+      in TypeScheme [aVar] [Add a] (a :~> a :~> a)
     numBinopType =
-      let aVar = nd "a" 0
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Num a)] (a :~> a :~> a)
+      in TypeScheme [aVar] [Num a] (a :~> a :~> a)
     eqTyp =
-      let aVar = nd "a" 0
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Eq a)] (a :~> a :~> TyBool)
+      in TypeScheme [aVar] [Eq a] (a :~> a :~> TyBool)
     ordTyp =
-      let aVar = nd "a" 0
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Ord a)] (a :~> a :~> TyBool)
+      in TypeScheme [aVar] [Ord a] (a :~> a :~> TyBool)
     unaryInt = NonGeneric (TyInt :~> TyInt)
     -- integer -> integer -> integer
     binaryInt = NonGeneric (TyInt :~> TyInt :~> TyInt)
@@ -678,13 +779,13 @@ instance TypeOfBuiltin CoreBuiltin where
     -- binaryBool = TypeScheme [] [] (TyBool :~> TyBool :~> TyBool)
     -- forall a. ListLike a => int -> a -> a
     takeDropTy =
-      let aVar = nd "a" 0
+      let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (ListLike a)] (TyInt :~> a :~> a)
+      in TypeScheme [aVar] [ListLike a] (TyInt :~> a :~> a)
 
 instance TypeOfBuiltin b => TypeOfBuiltin (ReplBuiltin b) where
-  typeOfBuiltin = \case
-    RBuiltinWrap b -> typeOfBuiltin b
+  typeOfBuiltin info = \case
+    RBuiltinWrap b -> typeOfBuiltin info b
     RBuiltinRepl _ -> error "Repl natives are not supported in typechecking"
 
 chainDataSchema :: Map Field (Type n)
@@ -704,19 +805,19 @@ chainDataSchema = M.fromList
 -- , gas-limit:integer
 -- , gas-price:decimal ]
 
-liftST :: ST s a -> InferM s b i a
+liftST :: ST s a -> InferM s i a
 liftST action = InferM $ lift $ lift $ lift action
 
-throwTypecheckError :: i -> TypecheckFailure -> InferM s b i a
+throwTypecheckError :: i -> TypecheckFailure i -> InferM s i a
 throwTypecheckError i msg = throwError (TypecheckError msg i)
 
-_dbgTypedArg :: TypedArg (TCType s) i -> InferM s b i (TypedArg (Type Text) i)
+_dbgTypedArg :: TypedArg (TCType s) i -> InferM s i (TypedArg (Type Text) i)
 _dbgTypedArg (TypedArg n ty i) =
   TypedArg n <$> _dbgType ty <*> pure i
 
 _dbgTypedTerm
   :: TCTerm s b i
-  -> InferM s b i (Term Text Text b i)
+  -> InferM s i (Term Text Text b i)
 _dbgTypedTerm = \case
   Var n i -> pure (Var (_nName n) i)
   Lam nel body i -> do
@@ -736,6 +837,7 @@ _dbgTypedTerm = \case
       TyAppVar tyn -> TyAppType <$> _dbgVar tyn
       TyAppRow row -> TyAppRow <$> _dbgRowCtor row
       TyAppType ty -> TyAppType <$> _dbgType ty
+      TyAppRef t' -> pure (TyAppRef t')
   TyAbs tys dicts term i -> do
     tys' <- traverse _dbgVar' tys
     dicts' <- traverse _dbgBuiltinTC dicts
@@ -761,7 +863,7 @@ _dbgTypedTerm = \case
   -- ObjectOp oop i ->
   --   ObjectOp <$> traverse _dbgTypedTerm oop <*> pure i
 
--- _dbgTypeScheme :: TypeScheme (TvRef s) -> InferM s b i (TypeScheme Text)
+-- _dbgTypeScheme :: TypeScheme (TvRef s) -> InferM s i (TypeScheme Text)
 -- _dbgTypeScheme (TypeScheme tvs preds ty) = do
 --   tvs' <- traverse rv tvs
 --   preds' <- traverse _dbgPred preds
@@ -773,7 +875,7 @@ _dbgTypedTerm = \case
 --     Bound u l -> pure ("bound" <> T.pack (show (u, l)))
 --     Link _ -> pure "linktv"
 
--- _dbgTvRef :: TvRef s -> InferM s b i Text
+-- _dbgTvRef :: TvRef s -> InferM s i Text
 -- _dbgTvRef tv = readTvRef tv >>= \case
 --     Unbound u l _ -> pure ("unbound" <> T.pack (show (u, l)))
 --     Bound u l -> pure ("bound" <> T.pack (show (u, l)))
@@ -781,14 +883,14 @@ _dbgTypedTerm = \case
 --       ty' <- _dbgType ty
 --       pure $ "linked type<" <> T.pack (show ty') <> ">"
 
-_dbgRoseRow :: RoseRow (TCTypeVar s) -> InferM s b i (RoseRow Text)
+_dbgRoseRow :: RoseRow (TCTypeVar s) -> InferM s i (RoseRow Text)
 _dbgRoseRow = \case
   RoseRowTy ty -> RoseRowTy <$> _dbgRowCtor ty
   RoseRowCat r r' ->
     RoseRowCat <$> _dbgRoseRow r <*> _dbgRoseRow r'
 
 
-_dbgBuiltinTC :: BuiltinTC (TCTypeVar s) -> InferM s b i (BuiltinTC Text)
+_dbgBuiltinTC :: BuiltinTC (TCTypeVar s) -> InferM s i (BuiltinTC Text)
 _dbgBuiltinTC = \case
   Eq ty -> Eq <$> _dbgType ty
   Ord ty -> Ord <$> _dbgType ty
@@ -805,22 +907,23 @@ _dbgBuiltinTC = \case
   RoseRowEq r1 r2 ->
     RoseSubRow <$> _dbgRoseRow r1 <*> _dbgRoseRow r2
 
-_dbgPred :: TCPred s -> InferM s b i (Pred Text)
-_dbgPred (Pred tc) = Pred <$> _dbgBuiltinTC tc
+_dbgPred :: TCPred i s -> InferM s i (Pred i Text)
+_dbgPred (Located i a) = Located i <$> _dbgBuiltinTC a
 
-_dbgType :: TCType s -> InferM s b i (Type Text)
+_dbgType :: TCType s -> InferM s i (Type Text)
 _dbgType = \case
   TyVar tv -> _dbgVar tv
   TyFun l r -> TyFun <$> _dbgType l <*> _dbgType r
   TyList t -> TyList <$> _dbgType t
   TyPrim p -> pure (TyPrim p)
-  TyModRef mr -> pure (TyModRef mr)
+  -- TODO: implement the correct _dbg
+  TyModRef _ -> pure (TyModRef (MConcrete mempty))
   TyObject o -> TyObject <$> _dbgRowCtor o
   TyTable o -> TyTable <$> _dbgRowCtor o
   TyCapToken -> pure TyCapToken
   TyNullary t -> TyNullary <$> _dbgType t
 
-_dbgRowCtor :: RowTy (TCTypeVar s) -> InferM s b i (RowTy Text)
+_dbgRowCtor :: RowTy (TCTypeVar s) -> InferM s i (RowTy Text)
 _dbgRowCtor = \case
   RowConcrete o -> do
     o' <- traverse _dbgType o
@@ -830,49 +933,57 @@ _dbgRowCtor = \case
     Bound u _ -> pure $ RowVar u
     LinkTy _ty -> error "invariant type in row var posn"
     LinkRow ty -> _dbgRowCtor ty
+    LinkRef _ -> error "invariant ref in row var posn"
 
-_dbgVar :: TCTypeVar s -> InferM s b i (Type Text)
+_dbgMRef :: MRef (TCTypeVar s) -> InferM s i (MRef Text)
+_dbgMRef = \case
+  MRefVar n -> MRefVar <$> _dbgVar' n
+  MConcrete s -> pure (MConcrete s)
+
+
+_dbgVar :: TCTypeVar s -> InferM s i (Type Text)
 _dbgVar tv = readTvRef tv >>= \case
   Unbound u l _ -> pure (TyVar ("unbound" <> T.pack (show (u, l))))
   Bound u l -> pure (TyVar ("bound" <> T.pack (show (u, l))))
   LinkTy ty -> _dbgType ty
   LinkRow ty -> _dbgType (TyObject ty)
+  LinkRef _ -> error "invariant ref in row var posn"
     -- LinkCap t -> _dbgType (TyCapToken t)
 
-_dbgVar' :: TCTypeVar s -> InferM s b i Text
+_dbgVar' :: TCTypeVar s -> InferM s i Text
 _dbgVar' tv = readTvRef tv >>= \case
   Unbound u l _ -> pure ("unbound" <> T.pack (show (u, l)))
   Bound u l -> pure ("bound" <> T.pack (show (u, l)))
-  _ -> error "Boom"
+  _ -> error "invariant broken"
 
 
-enterLevel :: InferM s b i ()
+enterLevel :: InferM s i ()
 enterLevel = do
   lref <- asks _tcLevel
   liftST (modifySTRef' lref succ)
 
-leaveLevel :: InferM s b i ()
+leaveLevel :: InferM s i ()
 leaveLevel = do
   lref <- asks _tcLevel
   liftST (modifySTRef' lref pred)
 
-currentLevel :: InferM s b i Level
+currentLevel :: InferM s i Level
 currentLevel =
   asks _tcLevel >>= liftST . readSTRef
 
-readTvRef :: TCTypeVar s -> InferM s b i (Tv s)
+readTvRef :: TCTypeVar s -> InferM s i (Tv s)
 readTvRef (TypeVar (TvRef tv) _) = liftST (readSTRef tv)
 
-writeTvRef :: TCTypeVar s -> Tv s -> InferM s b i ()
+writeTvRef :: TCTypeVar s -> Tv s -> InferM s i ()
 writeTvRef (TypeVar (TvRef tv) _) t = liftST (writeSTRef tv t)
 
--- newCapTokenRef :: QualifiedName -> InferM s b i (TCTypeVar s)
+-- newCapTokenRef :: QualifiedName -> InferM s i (TCTypeVar s)
 -- newCapTokenRef qn = do
 --   uref <- asks _tcSupply
 --   liftST (modifySTRef' uref (+ 1))
 --   (`TypeVar` UserDefKind) . TvRef <$> liftST (newSTRef (LinkCap (CapConcrete qn)))
 
-newTvRef :: InferM s b i (TvRef s)
+newTvRef :: InferM s i (TvRef s)
 newTvRef = do
   uref <- asks _tcSupply
   u <- liftST (readSTRef uref)
@@ -881,11 +992,11 @@ newTvRef = do
   liftST (modifySTRef' uref (+ 1))
   TvRef <$> liftST (newSTRef (Unbound tvName u l))
 
-newTypeVar :: PactKind -> InferM s b i (TCTypeVar s)
+newTypeVar :: PactKind -> InferM s i (TCTypeVar s)
 newTypeVar pk =
   TypeVar <$> newTvRef <*> pure pk
 
-newSupplyIx :: InferM s b i Unique
+newSupplyIx :: InferM s i Unique
 newSupplyIx = do
   uref <- asks _tcSupply
   u <- liftST (readSTRef uref)
@@ -904,17 +1015,17 @@ newSupplyIx = do
 -- -- Note: if these were user defined, if we decide to extend to this
 -- -- byInst would have to match the type of C (K t) to an instantiated version
 -- -- of the qualified type (C a_1, .., C a_n) => C (K t_1) for type constructors
-byInst :: i -> TCPred s -> InferM s b i (Maybe [TCPred s])
-byInst i (Pred p) = case p of
-  Eq ty -> eqInst ty
+byInst :: TCPred i s -> InferM s i (Maybe [TCPred i s])
+byInst (Located i p) = case p of
+  Eq ty -> eqInst i ty
   Add ty -> addInst ty
   Num ty -> numInst ty
-  Ord ty -> ordInst ty
-  Show ty -> showInst ty
+  Ord ty -> ordInst i ty
+  Show ty -> showInst i ty
   ListLike ty -> listLikeInst ty
   Fractional ty -> fractionalInst ty
   EnforceRead ty -> enforceReadInst ty
-  EqRow l -> eqRowInst l
+  EqRow l -> eqRowInst i l
   RoseSubRow l r -> roseSubRow i l r
   IsValue v -> isValueInst v
   RoseRowEq l r -> roseRowEq i l r
@@ -934,28 +1045,17 @@ byInst i (Pred p) = case p of
 --    where t_1..t_n are monotypes without type variables.
 --  instance (EqRow r) => Eq (Object {r})
 --
-eqInst :: TCType s -> InferM s b i (Maybe [TCPred s])
-eqInst = \case
+eqInst :: i -> TCType s -> InferM s i (Maybe [TCPred i s])
+eqInst i = \case
   TyVar tv -> readTvRef tv >>= \case
-    LinkTy ty -> eqInst ty
+    LinkTy ty -> eqInst i ty
     _ -> pure Nothing
   -- All prims have an EQ instance
   TyPrim _ -> pure (Just [])
   TyModRef _ -> pure (Just [])
-  TyList t -> pure (Just [Pred (Eq t)])
+  TyList t -> pure (Just [Located i (Eq t)])
   TyCapToken -> pure (Just [])
-  --  case cr of
-    -- CapConcrete{} -> pure $ Just []
-    -- CapVar tv -> readTvRef tv >>= \case
-      -- LinkCap cvar' -> eqInst (TyCapToken cvar')
-      -- _ -> pure Nothing
-  TyObject r -> pure $ Just [Pred (EqRow r)]
-    -- RowVar rv -> readTvRef rv >>= \case
-    --   LinkRow row' -> eqInst (TyObject row')
-    --   _ -> pure Nothing
-    -- RowConcrete row -> do
-    --   preds <- M.elems <$> traverse eqInst row
-    --   pure $ concat <$> sequence preds
+  TyObject r -> pure $ Just [Located i (EqRow r)]
   _ -> pure Nothing
 
 -- | Instances of Ord:
@@ -969,10 +1069,10 @@ eqInst = \case
 --  instance (Ord 'a) => Ord (list 'a)
 --  For rows:
 --
-ordInst :: TCType s -> InferM s b i (Maybe [TCPred s])
-ordInst = \case
+ordInst :: i -> TCType s -> InferM s i (Maybe [TCPred i s])
+ordInst i = \case
   TyVar tv -> readTvRef tv >>= \case
-    LinkTy ty -> ordInst ty
+    LinkTy ty -> ordInst i ty
     _ -> pure Nothing
   -- All prims have an Ord instance
   TyPrim p -> case p of
@@ -982,7 +1082,7 @@ ordInst = \case
     PrimTime -> pure (Just [])
     PrimUnit -> pure (Just [])
     _ -> pure Nothing
-  TyList t -> pure (Just [Pred (Ord t)])
+  TyList t -> pure (Just [Located i (Ord t)])
   _ -> pure Nothing
 
 
@@ -994,7 +1094,7 @@ ordInst = \case
 -- --  instance Add (list 'a)
 -- --
 -- --
-addInst :: TCType s -> InferM s b i (Maybe [TCPred s])
+addInst :: TCType s -> InferM s i (Maybe [TCPred i s])
 addInst = \case
   TyVar tv -> readTvRef tv >>= \case
     LinkTy ty -> addInst ty
@@ -1008,7 +1108,7 @@ addInst = \case
   TyList _ -> pure (Just [])
   _ -> pure Nothing
 
-isValueInst :: TCType s -> InferM s b i (Maybe [TCPred s])
+isValueInst :: TCType s -> InferM s i (Maybe [TCPred i s])
 isValueInst = \case
   TyVar tv -> readTvRef tv >>= \case
     LinkTy ty -> isValueInst ty
@@ -1030,7 +1130,7 @@ isValueInst = \case
 -- | Instances of num:
 -- instance Num integer
 -- instance Num decimal
-numInst :: TCType s -> InferM s b i (Maybe [TCPred s])
+numInst :: TCType s -> InferM s i (Maybe [TCPred i s])
 numInst = \case
   TyVar tv -> readTvRef tv >>= \case
     LinkTy ty -> numInst ty
@@ -1045,7 +1145,7 @@ numInst = \case
 -- | Instances of fractional:
 -- instance Fractional integer
 -- instance Fractional decimal
-fractionalInst :: TCType s -> InferM s b i (Maybe [TCPred s])
+fractionalInst :: TCType s -> InferM s i (Maybe [TCPred i s])
 fractionalInst = \case
   TyVar tv -> readTvRef tv >>= \case
     LinkTy ty -> fractionalInst ty
@@ -1056,7 +1156,7 @@ fractionalInst = \case
     _ -> Nothing
   _ -> pure Nothing
 
-listLikeInst :: TCType s -> InferM s b i (Maybe [TCPred s])
+listLikeInst :: TCType s -> InferM s i (Maybe [TCPred i s])
 listLikeInst = \case
   TyVar tv -> readTvRef tv >>= \case
     LinkTy ty -> listLikeInst ty
@@ -1067,7 +1167,7 @@ listLikeInst = \case
   TyList _ -> pure $ Just []
   _ -> pure Nothing
 
-enforceReadInst :: TCType s -> InferM s b i (Maybe [a])
+enforceReadInst :: TCType s -> InferM s i (Maybe [a])
 enforceReadInst = \case
   TyVar tv -> readTvRef tv >>= \case
     LinkTy ty -> enforceReadInst ty
@@ -1078,16 +1178,16 @@ enforceReadInst = \case
     _ -> Nothing
   _ -> pure Nothing
 
-eqRowInst :: TCRowCtor s -> InferM s b i (Maybe [TCPred s])
-eqRowInst = \case
+eqRowInst :: i -> TCRowCtor s -> InferM s i (Maybe [TCPred i s])
+eqRowInst i = \case
     RowVar rv -> readTvRef rv >>= \case
-      LinkRow row' -> eqRowInst row'
+      LinkRow row' -> eqRowInst i row'
       _ -> pure Nothing
     RowConcrete row -> do
-      preds <- M.elems <$> traverse eqInst row
+      preds <- M.elems <$> traverse (eqInst i) row
       pure $ concat <$> sequence preds
 
-roseSubRow :: i -> TCRoseRow s -> TCRoseRow s -> InferM s b i (Maybe [TCPred s])
+roseSubRow :: i -> TCRoseRow s -> TCRoseRow s -> InferM s i (Maybe [TCPred i s])
 roseSubRow i l r = do
   l' <- normalizeRoseSubrow l
   r' <- normalizeRoseSubrow r
@@ -1096,36 +1196,37 @@ roseSubRow i l r = do
       let lkeys = S.fromList (M.keys lrow)
           rkeys = S.fromList (M.keys rrow)
       unless (lkeys `S.isSubsetOf` rkeys) $ error "cannot satisfy subrow constraint: objects do not match"
-      forM_ (M.toList lrow) $ \(k, v) -> unify i v (rrow M.! k)
+      forM_ (M.toList lrow) $ \(k, v) -> unify (Located i v) (Located i (rrow M.! k))
       pure $ Just []
     _ -> pure Nothing
 
 
-roseRowEq :: i -> TCRoseRow s -> TCRoseRow s -> InferM s b i (Maybe [TCPred s])
+roseRowEq :: i -> TCRoseRow s -> TCRoseRow s -> InferM s i (Maybe [TCPred i s])
 roseRowEq i l r = do
   l' <- normalizeRoseSubrow l
   r' <- normalizeRoseSubrow r
+  -- Todo:
   case (l', r') of
     (RoseConcrete lrow, RoseVar rvar) ->
-      unifyConcrete rvar lrow *> pure (Just [])
+      unifyConcrete (Located i rvar) (Located i lrow) *> pure (Just [])
     (RoseVar lvar, RoseConcrete rrow) ->
-      unifyConcrete lvar rrow *> pure (Just [])
+      unifyConcrete (Located i lvar) (Located i rrow) *> pure (Just [])
     (RoseConcrete lrow, RoseConcrete rrow) -> do
       let lkeys = S.fromList (M.keys lrow)
           rkeys = S.fromList (M.keys rrow)
       unless (lkeys == rkeys) $ error "cannot satisfy row eq constraint: objects do not match"
-      zipWithM_ (unify i) (M.elems lrow) (M.elems rrow)
+      zipWithM_ (\x y -> unify (Located i x) (Located i y)) (M.elems lrow) (M.elems rrow)
       pure $ Just []
     (RoseVar lvar, RoseVar rvar) ->
-      unifyRowVar i lvar (RowVar rvar ) *> pure (Just [])
+      unifyRowVar (Located i lvar) (Located i (RowVar rvar)) *> pure (Just [])
     _ -> pure Nothing
   where
   unifyConcrete var row =
-    unifyRowVar i var (RowConcrete row)
+    unifyRowVar var (RowConcrete <$> row)
 
 normalizeRoseSubrow
   :: RoseRow (TCTypeVar s)
-  -> InferM s b i (RoseRow (TCTypeVar s))
+  -> InferM s i (RoseRow (TCTypeVar s))
 normalizeRoseSubrow (RoseRowCat l r) = do
   l' <- normalizeRoseSubrow l
   r' <- normalizeRoseSubrow r
@@ -1155,28 +1256,31 @@ normalizeRoseSubrow (RoseRowTy ty) = case ty of
 --  instance (Show 'a) => Show (list 'a)
 --  instance (Show )
 --  For rows:
---  instance (Eq {l1:t1, .., ln:tn}) where t1..tn are monotypes without type variables.
+--  instance (Show {l1:t1, .., ln:tn}) where t1..tn are monotypes without type variables.
 --
-showInst :: TCType s -> InferM s b i (Maybe [TCPred s])
-showInst = \case
+showInst :: i -> TCType s -> InferM s i (Maybe [TCPred i s])
+showInst i = \case
   TyVar tv -> readTvRef tv >>= \case
-    LinkTy ty -> showInst ty
+    LinkTy ty -> showInst i ty
     _ -> pure Nothing
-  -- All prims have an EQ instance
+  -- All prims have a show instance
   TyPrim _p -> pure (Just [])
-  TyList t -> pure (Just [Pred (Show t)])
+  TyCapToken -> pure (Just [])
+  TyObject{} -> pure (Just [])
+  TyTable{} -> pure (Just [])
+  TyList t -> pure (Just [Located i (Show t)])
   _ -> pure Nothing
 
-entail :: i -> [TCPred s] -> TCPred s -> InferM s b i Bool
-entail i ps p = byInst i p >>= \case
+entail :: i -> [TCPred i s] -> TCPred i s -> InferM s i Bool
+entail i ps p = byInst p >>= \case
   Nothing -> pure False
   Just qs -> and <$> traverse (entail i ps) qs
 
 typedArgToTypeScheme :: TypedArg (Type n) i -> TypeScheme n
 typedArgToTypeScheme (TypedArg _ t _) = TypeScheme [] [] t
 
-isHnf :: TCPred s -> InferM s b i Bool
-isHnf (Pred t) = case t of
+isHnf :: TCPred i s -> InferM s i Bool
+isHnf (Located _ t) = case t of
   Eq ty -> tyHnf ty
   Add ty -> tyHnf ty
   Num ty -> tyHnf ty
@@ -1204,7 +1308,7 @@ isHnf (Pred t) = case t of
   -- unbounds <- traverseTCType tyHnf t
   -- pure $ and unbounds
 
-tyHnf :: TCType s -> InferM s b i Bool
+tyHnf :: TCType s -> InferM s i Bool
 tyHnf = \case
   TyVar tv -> readTvRef tv >>= \case
     LinkTy ty -> tyHnf ty
@@ -1221,41 +1325,41 @@ tyHnf = \case
     RowConcrete rows ->
       and <$> traverse tyHnf rows
 
-toHnf :: i -> TCPred s -> InferM s b i [TCPred s]
+toHnf :: i -> TCPred i s -> InferM s i [TCPred i s]
 toHnf i p = isHnf p >>= \case
   True -> pure [p]
-  False -> byInst i p >>= \case
+  False -> byInst p >>= \case
     Nothing -> do
       t' <- _dbgPred p
-      error $ "context reduction error "  <> show t'
+      throwTypecheckError i $ CannotResolveConstraints [t']
     Just ps -> toHnfs i ps
 
-toHnfs :: i -> [TCPred s] -> InferM s b i [TCPred s]
+toHnfs :: i -> [TCPred i s] -> InferM s i [TCPred i s]
 toHnfs i ps = do
   pss <- traverse (toHnf i) ps
   pure (concat pss)
 
-simplify :: i -> [TCPred s] -> InferM s b i [TCPred s]
+simplify :: i -> [TCPred i s] -> InferM s i [TCPred i s]
 simplify i = loop []
   where
   loop rs [] = pure rs
   loop rs (p:ps) = entail i (rs ++ ps) p >>= \cond ->
     if cond then loop rs ps else loop (p:rs) ps
 
-reduce :: i -> [TCPred s] -> InferM s b i [TCPred s]
+reduce :: i -> [TCPred i s] -> InferM s i [TCPred i s]
 reduce i ps = toHnfs i ps >>= simplify i
 
 -- | Split typeclass constraints into
 --   those that are resolved and those that have unresolved type variables
 split
-  :: [TCPred s]
+  :: [TCPred i s]
   -> i
-  -> InferM s b i ([TCPred s], [TCPred s])
+  -> InferM s i ([TCPred i s], [TCPred i s])
 split ps i = do
   ps' <- reduce i ps
   partition' ([], []) ps'
   where
-  partition' (ds, rs) (p@(Pred ty) : xs) = do
+  partition' (ds, rs) (p@(Located _ ty) : xs) = do
     cond <- tcHasUnbound ty
     if cond then partition' (p:ds, rs) xs
     else partition' (ds, p:rs) xs
@@ -1265,6 +1369,7 @@ split ps i = do
     Unbound{} -> pure True
     LinkTy ty -> hasUnbound ty
     LinkRow r -> rowUnbound r
+    LinkRef _ -> pure False
     Bound {} -> pure False
   tcHasUnbound = \case
     Eq t -> hasUnbound t
@@ -1300,14 +1405,6 @@ split ps i = do
     RowVar n -> varUnbound n
     RowConcrete n -> or <$> traverse hasUnbound n
 
-checkReducible :: i -> [TCPred s] -> InferM s b i ()
-checkReducible i ps =
-  reduce i ps >>= \case
-    [] -> pure ()
-    _xs' -> error "unsupported: could not resolve all typeclass params"
-      -- xs' <- traverse _dbgPred xs
-      -- throwTypecheckError (UnsupportedTypeclassGeneralization xs') i
-
 ----------------------------------------------------------------------
 ---- Instantiations
 ---------------------------------------------------------------------
@@ -1321,24 +1418,25 @@ checkReducible i ps =
 --     ---------------------------------------
 --     P | Γ ⊢ E ~> E_f[b_1,..,b c_n] : ρ
 instantiateWithTerm
-  :: TypeScheme (TCTypeVar s)
+  :: i
+  -> TypeScheme (TCTypeVar s)
   -> TCTerm s b i
-  -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
-instantiateWithTerm (TypeScheme [] [] t) te = pure (t, te, [])
-instantiateWithTerm (TypeScheme ts preds ty) term = do
+  -> InferM s i (TCType s, TCTerm s b i, [TCPred i s])
+instantiateWithTerm _ (TypeScheme [] [] t) te = pure (t, te, [])
+instantiateWithTerm i (TypeScheme ts preds ty) term = do
   nts <- traverse (\tv -> newTypeVar (_tpKind tv)) ts
   let m = zip ts nts
-  preds' <- traverse (instPred m) preds
+  preds' <- traverse (instTC m) preds
   ty' <- instBound m ty
   term' <- case TyAppVar <$> nts of
     x:xs -> do
       pure $ TyApp term (x:|xs) info
     [] -> pure term
-  pure (ty', term', preds')
+  pure (ty', term', (Located i <$> preds'))
   where
   info = term ^. termInfo
-  instPred m (Pred tt) =
-    Pred <$> traverseTCType (instBound m) tt
+  instTC m tt =
+    traverseTCType (instBound m) tt
   instRow m = \case
     r@(RowVar rv) -> readTvRef rv >>= \case
       Bound{} -> case lookup rv m of
@@ -1365,20 +1463,21 @@ instantiateWithTerm (TypeScheme ts preds ty) term = do
     TyObject o -> TyObject <$> instRow m o
     TyTable o -> TyTable <$> instRow m o
 
+-- Instantiate a type scheme such as
+-- forall a. a -> a into
+-- a_fresh_k -> a_fresh_k
 instantiateImported
-  :: TypeScheme DebruijnTypeVar
-  -> i
-  -> InferM s b i (TCType s, [TCTypeVar s], [TCPred s])
-instantiateImported (TypeScheme tvs preds ty) _i = do
+  :: i
+  -> TypeScheme DebruijnTypeVar
+  -> InferM s i (TCType s, [TCTypeVar s], [TCPred i s])
+instantiateImported i (TypeScheme tvs preds ty) = do
     ntvs <- traverse (const newTvRef) tvs
     let ntvs' = zipWith (\tvr (TypeVar _ kind) -> TypeVar tvr kind) ntvs tvs
     let rl = RAList.fromList (reverse ntvs)
     ty' <- inst rl ty
-    preds' <- traverse (instPred rl) preds
-    pure (ty', ntvs', preds')
+    preds' <- traverse (instTC rl) preds
+    pure (ty', ntvs', (Located i <$> preds'))
   where
-  instPred rl (Pred tc) = do
-    Pred <$> instTC rl tc
   instNamed rl (TypeVar (NamedDeBruijn i' _) kind) =
     pure $ TypeVar (rl RAList.!! i') kind
   instTC rl = \case
@@ -1404,35 +1503,33 @@ instantiateImported (TypeScheme tvs preds ty) _i = do
     TyPrim p -> pure (TyPrim p)
     TyFun l r -> TyFun <$> inst rl l <*> inst rl r
     TyList t -> TyList <$> inst rl t
-    TyModRef mr -> pure (TyModRef mr)
+    TyModRef mr -> TyModRef <$> instMRef rl mr
     TyNullary n -> TyNullary <$> inst rl n
     TyObject rc -> TyObject <$> instRow rl rc
     TyTable rc -> TyTable <$> instRow rl rc
     TyCapToken -> pure TyCapToken
-  -- instCapVar rl = \case
-  --   CapVar n -> CapVar <$> instNamed rl n
-  --   CapConcrete fp -> pure (CapConcrete fp)
+  instMRef rl = \case
+    MRefVar v -> MRefVar <$> instNamed rl v
+    MConcrete m -> pure (MConcrete m)
   instRow rl = \case
     RowVar n -> RowVar <$> instNamed rl n
     RowConcrete m ->
       RowConcrete <$> traverse (inst rl) m
-    -- Impredicative type might work
-    -- If we change unification.
-    -- TyForall _ _ ->
-    --   throwTypecheckError UnsupportedImpredicativity i
 
+-- Check that we are not unifying infinite types, that is,
+-- for example `a ~ a -> a`. Pact doesn't have a notion of recursive types
+-- (yet? :) ) so we perform this check.
 occurs
-  :: i
-  -> TCTypeVar s
-  -> TCType s
-  -> InferM s b' i ()
-occurs i tv tct = go tct
+  :: (Located i (TCTypeVar s))
+  -> (Located i (TCType s))
+  -> InferM s i ()
+occurs (Located tvi tv) (Located tyi tct) = go tct
   where
   go = \case
     TyVar tv' | tv == tv' -> do
       tl <- _dbgType (TyVar tv)
       tr <- _dbgType tct
-      throwTypecheckError i $ InfiniteType tl tr
+      throwTypecheckError tvi $ InfiniteType (Located tvi tl) (Located tyi tr)
     TyVar tv' -> bindRef tv'
     TyFun l r -> go l *> go r
     TyNullary l -> go l
@@ -1446,7 +1543,7 @@ occurs i tv tct = go tct
     RowVar tv' | tv == tv' -> do
       tl <- _dbgType (TyVar tv)
       tr <- _dbgType tct
-      throwTypecheckError i $ InfiniteType tl tr
+      throwTypecheckError tvi $ InfiniteType (Located tvi tl) (Located tyi tr)
     RowVar tv' -> bindRef tv'
     RowConcrete t -> traverse_ go t
   bindRef tv' = readTvRef tv' >>= \case
@@ -1461,20 +1558,19 @@ occurs i tv tct = go tct
     _ -> pure ()
 
 occursRow
-  :: i
-  -> TCTypeVar s
-  -> TCRowCtor s
-  -> InferM s b' i ()
-occursRow i tv tct = go tct
+  :: Located i (TCTypeVar s)
+  -> Located i (TCRowCtor s)
+  -> InferM s i ()
+occursRow locTv@(Located tvi tv) (Located tci tct) = go tct
   where
   go = \case
     RowVar tv' | tv == tv' -> do
       tl <- _dbgType (TyVar tv)
       -- Todo: TyObject is not the correct type here for the occurs check
       tr <- _dbgType (TyObject tct)
-      throwTypecheckError i $ InfiniteType tl tr
+      throwTypecheckError tvi $ InfiniteType (Located tvi tl) (Located tci tr)
     RowVar tv' -> bindRef tv'
-    RowConcrete t -> traverse_ (occurs i tv) t
+    RowConcrete t -> traverse_ (\r -> occurs locTv (Located tci r)) t
   bindRef tv' = readTvRef tv' >>= \case
     Unbound n u l' -> do
       ml <- minLevel
@@ -1483,14 +1579,14 @@ occursRow i tv tct = go tct
       minLevel = readTvRef tv >>= \case
         Unbound _ _ l -> pure (min l l')
         _ -> pure l'
-    LinkTy ty -> occurs i tv ty
+    LinkRow ty -> occursRow locTv (Located tci ty)
     _ -> pure ()
 
 ensureWellKinded
   :: i
   -> TCTypeVar s
   -> PactKind
-  -> InferM s' b i ()
+  -> InferM s i ()
 ensureWellKinded i (TypeVar _ k) expected
   | k == expected = pure ()
   | otherwise =
@@ -1498,82 +1594,89 @@ ensureWellKinded i (TypeVar _ k) expected
 
 
 unifyTyVar
-  :: i
-  -> TCTypeVar s
-  -> TCType s
-  -> InferM s b' i ()
-unifyTyVar i tv t1 = do
-  ensureWellKinded i tv TyKind
+  :: Located i (TCTypeVar s)
+  -> Located i (TCType s)
+  -> InferM s i ()
+unifyTyVar locTv@(Located li tv) locTy@(Located ri t1) = do
+  ensureWellKinded li tv TyKind
   readTvRef tv >>= \case
     Unbound{} -> do
-      occurs i tv t1
+      occurs locTv locTy
       writeTvRef tv (LinkTy t1)
     Bound{} -> do
       t1' <- _dbgType t1
       t2' <- _dbgType $ TyVar tv
-      throwTypecheckError i $ UnificationFailure t1' t2'
-    LinkTy t2 -> unify i t2 t1
-    LinkRow row -> do
-      row' <- _dbgRowCtor row
-      throwTypecheckError i $ InvariantRowInTypeVarPosition row'
+      throwTypecheckError li $ UnificationFailure (Located li t1') (Located ri t2')
+    LinkTy tyLink -> unify (Located li tyLink) locTy
+    _ -> wellKindedGuaranteed
 
 unifyRowVar
-  :: i
-  -> TCTypeVar s
-  -> TCRowCtor s
-  -> InferM s b' i ()
-unifyRowVar i tv t1 = do
+  :: Located i (TCTypeVar s)
+  -> Located i (TCRowCtor s)
+  -> InferM s i ()
+unifyRowVar loc@(Located i tv) locRow@(Located _ row) = do
   ensureWellKinded i tv RowKind
   readTvRef tv >>= \case
     Unbound{} -> do
       -- todo: occurs check for rows row
       -- occurs tv t1 i
-      occursRow i tv t1
-      traceM "writing linkRow to unbound"
-      writeTvRef tv (LinkRow t1)
-    LinkRow row -> do
-      traceM $ "unifying row"
-      unifyRow i row t1
-    Bound{} -> error "cannot unify with bound variable"
-    _ -> error "Impossible"
+      occursRow loc locRow
+      writeTvRef tv (LinkRow row)
+    LinkRow linkedRow -> do
+      unifyRow (Located i linkedRow) locRow
+    Bound n _ ->
+      throwTypecheckError i $ CannotUnifyWithBoundVariable n
+    _ -> wellKindedGuaranteed
 
--- TODO: Captoken unif.
+-- | Solve the constraint `t1 ~ t2`
+--   Since we use mutable type variables, `unify` simply returns unit.
+--   Unification of a type variable with a
+--
+--   We've got to ensure we thread the right info from the `Located` instance whenver
+--   we do any sort of recursive call for better error messages.
 unify
-  :: i
-  -> TCType s
-  -> TCType s
-  -> InferM s b i ()
-unify _i t1 t2 | t1 == t2 = pure ()
-unify i (TyVar tv) t = unifyTyVar i tv t
-unify i t (TyVar tv)  = unifyTyVar i tv t
-unify i (TyFun l r) (TyFun l' r') = unify i l l' *> unify i r r'
-unify i (TyList t) (TyList t') = unify i t t'
-unify _ (TyPrim p) (TyPrim p') | p == p' = pure ()
-unify _ TyCapToken TyCapToken = pure ()
-unify i (TyObject r) (TyObject l) = unifyRow i l r
-unify i (TyTable r) (TyTable l) = unifyRow i l r
-unify i (TyNullary l) (TyNullary r) = unify i l r
-unify _i (TyModRef mr) (TyModRef mr') | mr == mr' = pure ()
-unify i t1 t2 = do
-  t1' <- _dbgType t1
-  t2' <- _dbgType t2
-  throwTypecheckError i (UnificationFailure t1' t2')
+  :: (Located i (TCType s))
+  -> (Located i (TCType s))
+  -> InferM s i ()
+unify lloc@(Located li lt) rloc@(Located ri rt) = unify' lt rt
+  where
+  unify' t1 t2 | t1 == t2 = pure ()
+  unify' (TyVar tv) _ = unifyTyVar (Located li tv) rloc
+  unify' _ (TyVar tv)  = unifyTyVar (Located ri tv) lloc
+  unify' (TyFun l r) (TyFun l' r') =
+    unify (Located li l) (Located ri l') *> unify (Located li r) (Located ri r')
+  unify' (TyList t) (TyList t') = unify (Located li t) (Located li t')
+  unify' (TyPrim p) (TyPrim p') | p == p' = pure ()
+  unify' TyCapToken TyCapToken = pure ()
+  unify' (TyObject r) (TyObject l) = unifyRow (Located li l) (Located ri r)
+  unify' (TyTable r) (TyTable l) = unifyRow (Located li l) (Located ri r)
+  unify' (TyNullary l) (TyNullary r) = unify (Located li l) (Located ri r)
+  unify' (TyModRef mr) (TyModRef mr') | mr == mr' = pure ()
+  unify' t1 t2 = do
+    t1' <- _dbgType t1
+    t2' <- _dbgType t2
+    throwTypecheckError li (UnificationFailure (Located li t1') (Located ri t2'))
 
 unifyRow
-  :: i
-  -> TCRowCtor s
-  -> TCRowCtor s
-  -> InferM s b i ()
-unifyRow i (RowVar tv) row =
-  unifyRowVar i tv row
-unifyRow i row (RowVar tv) =
-  unifyRowVar i tv row
-unifyRow i (RowConcrete lrow) (RowConcrete rrow) = do
-  when (M.keys lrow /= M.keys rrow) $ error "cannot unify rows"
-  () <$ zipWithM (unify i) (M.elems lrow) (M.elems rrow)
+  :: Located i (TCRowCtor s)
+  -> Located i (TCRowCtor s)
+  -> InferM s i ()
+unifyRow locRowL@(Located li lrow) locRowR@(Located ri rrow) =
+  unifyRow' lrow rrow
+  where
+  unifyRow' (RowVar tv) _ =
+    unifyRowVar (Located li tv) locRowR
+  unifyRow' _ (RowVar tv) =
+    unifyRowVar (Located ri tv) locRowL
+  unifyRow' (RowConcrete lrow') (RowConcrete rrow') = do
+    when (M.keys lrow' /= M.keys rrow') $ do
+      l' <- _dbgRowCtor lrow
+      r' <- _dbgRowCtor rrow
+      throwTypecheckError li (RowUnificationFailure (Located li l') (Located ri r'))
+    () <$ zipWithM (\lty rty -> unify (Located li lty) (Located ri rty)) (M.elems lrow') (M.elems rrow')
 
 -- | Traverse a type and normalize all `LinkTy` and `LinkRow`s
-traverseTypeLinks :: TCType s -> InferM s b i (TCType s)
+traverseTypeLinks :: TCType s -> InferM s i (TCType s)
 traverseTypeLinks = transformM $ \case
   TyVar rv -> readTvRef rv >>= \case
     LinkTy tl -> pure tl
@@ -1591,13 +1694,12 @@ traverseTypeLinks = transformM $ \case
       _ -> pure (RowVar rv)
     RowConcrete rv -> pure (RowConcrete rv)
 
--- -- | We essentially only
--- -- generalize on lambdas atm.
+-- | We will only generalize on syntactic "values"
 generalizeWithTerm
   :: TCType s
-  -> [TCPred s]
+  -> [TCPred i s]
   -> TCTerm s b i
-  -> InferM s b i (TypeScheme (TCTypeVar s), TCTerm s b i, [TCPred s])
+  -> InferM s i (TypeScheme (TCTypeVar s), TCTerm s b i, [TCPred i s])
 generalizeWithTerm ty pp term
   | isValue term = generalizeWithTerm'
   | otherwise = do
@@ -1626,14 +1728,14 @@ generalizeWithTerm ty pp term
       ([], []) -> do
         pure (TypeScheme [] [] ty' , term, deferred)
       ([], _) -> error "retained predicates despite no generalized type variables"
-      (x:xs, p) -> do
-        pure (TypeScheme ftvs p ty', Typed.TyAbs (x:|xs) (_typeclassPredicate <$> p) term info, deferred)
+      (x:xs, (fmap _locElem -> p)) -> do
+        pure (TypeScheme ftvs p ty', Typed.TyAbs (x:|xs) p term info, deferred)
     where
     nubPreds li = do
-      nub <$> (traverse.typeclassPredicate.traverseTCType) traverseTypeLinks li
+      nubBy (\l r -> _locElem l == _locElem r) <$> (traverse.locElem.traverseTCType) traverseTypeLinks li
     info = term ^. Typed.termInfo
-    genPred (Pred p) = do
-      Pred <$> traverseTCType generalizeOnType p
+    genPred (Located i p) = do
+      Located i <$> traverseTCType generalizeOnType p
     generalizeOnType = (lift . traverseTypeLinks) >=> generalizeOnType'
     generalizeOnType' = \case
       TyVar tv -> lift (readTvRef tv) >>= \case
@@ -1641,8 +1743,6 @@ generalizeWithTerm ty pp term
           cl <- lift currentLevel
           -- If the generalization depth is _higher_ than the current level, then we will
           -- generalize on that variable
-          traceM $ "LEVEL OF UNBOUND" <> show l
-          traceM $ "CURR LEVEL" <> show cl
           when (l > cl) $ do
             lift (writeTvRef tv (Bound n u))
             (uniques, ftvs) <- get
@@ -1666,175 +1766,169 @@ generalizeWithTerm ty pp term
       RowVar tv -> lift (readTvRef tv) >>= \case
         Unbound n u l -> do
           cl <- lift currentLevel
-          -- If the generalization depth is _higher_ than the current level, then we will
-          -- generalize on that variable
           when (l > cl) $ do
             lift (writeTvRef tv (Bound n u))
             (uniques, ftvs) <- get
-            -- If we've already recorded our generalization over this variable, then do nothing
             when (S.notMember u uniques) $ put (S.insert u uniques, tv:ftvs)
-            -- Otherwise, record its generalization and
           pure $ RowVar tv
-        -- LinkTy t' -> generalizeOnType t'
-        -- Bound _ _ -> pure (TyVar tv)
         _ -> pure (RowVar tv)
       RowConcrete r ->
         RowConcrete <$> traverse generalizeOnType' r
 
-    -- _ -> undefined)
-    -- (o, pty')  <- gen' pty
-    -- when (o /= []) $
-    --   lift (throwTypecheckError (TCInvariantFailure "Generalizing predicates") info)
-    -- pure (Pred t pty')
-  -- gen' (TyVar tv) = lift (readTvRef tv) >>= \case
-  --   Unbound n u l -> do
-  --     cl <- lift currentLevel
-  --     -- If the generalization depth is _higher_ than the current level, then we will
-  --     -- generalize on that variable
-  --     when (l > cl) $ do
-  --       lift (writeTvRef tv (Bound n u))
-  --       (uniques, ftvs) <- get
-  --       -- If we've already recorded our generalization over this variable, then do nothing
-  --       when (S.notMember u uniques) $ put (S.insert u uniques, tv:ftvs)
-  --       -- Otherwise, record its generalization and
-  --     pure $ TyVar tv
-  --   LinkTy t' -> gen' t'
-  --   Bound _ _ -> pure ([], TyVar tv)
-  --   _ -> error "Invariant failure: row bound as type"
-  -- gen' (TyFun l r) = do
-  --   (ftvl, l') <- gen' l
-  --   (ftvr, r') <- gen' r
-  --   pure (ftvl ++ ftvr,TyFun l' r')
-  -- gen' t@TyPrim{} = pure ([], t)
-  -- gen' (TyList t) = over _2 TyList <$> gen' t
-  -- gen' (TyModRef mr) = pure ([], TyModRef mr)
-  -- gen' (TyNullary n) = over _2 TyNullary <$> gen' n
-  -- gen' (TyObject o) = undefined
-  -- gen' (TyTable o) = undefined
-  -- gen' TyCapToken = pure TyCapToken
-
 checkTermType
   :: (TypeOfBuiltin b)
-  => TCType s
+  => Located i (TCType s)
   -> IR.Term Name IR.Type b i
-  -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
+  -> InferM s i (TCType s, TCTerm s b i, [TCPred i s])
 checkTermType checkty = \case
   IR.Var irn@(Name n nk) i -> case nk of
     NBound u -> do
       views tcVarEnv (`RAList.lookup` u) >>= \case
         Just nty -> do
-          traceM "looking up bound var"
           let newVar = Var irn i
-          (rty, term', preds) <- instantiateWithTerm nty newVar
-          traceM "post instantiate"
-          unify i rty checkty
+          (rty, term', preds) <- instantiateWithTerm i nty newVar
+          unify (Located i rty) checkty
           pure (rty, term', preds)
         Nothing ->
           throwTypecheckError i $ InvariantUnboundTermVariable n
     NTopLevel mn mh -> do
       let fqn = FullyQualifiedName mn n mh
-      use (tcFree . at fqn) >>= \case
-        Just nty -> do
-          (rty, tyvars, preds) <- instantiateImported nty i
-          unify i rty checkty
-          let newVar = Var irn i
-          case tyvars of
-            [] -> pure (rty, newVar, preds)
-            (x:xs) -> pure (rty, TyApp newVar (TyAppVar x :| fmap TyAppVar xs) i, preds)
-        _ ->
-          throwTypecheckError i $ InvariantUnboundFreeVariable fqn
-    NModRef m ifs -> case checkty of
-      TyModRef mn -> do
+      nty <- lookupDefnType i fqn
+      (rty, tyvars, preds) <- instantiateImported i nty
+      unify (Located i rty) checkty
+      let newVar = Var irn i
+      case tyvars of
+        [] -> pure (rty, newVar, preds)
+        (x:xs) -> pure (rty, TyApp newVar (TyAppVar x :| fmap TyAppVar xs) i, preds)
+    -- This rule essentially adds a sort of subsumption, which we will call
+    -- "modref subsumption", and the entire reason why our
+    -- typechecker is bidirectional in the first place (Seriously!!!)
+    --
+    -- Module references need to be able to operate where "weaker" bounds are required, but
+    -- not when stronger ones are. That is:
+    -- a `module{iface1, iface2}` may be used wherever a `module{iface1}` is required
+    -- a `module{iface1}` may NOT be used wherever a `module{iface1, iface2}` is required
+    --
+    -- This means that modrefs do not play nice without type annotations or the assistance of
+    -- bidirectionality.
+    -- Code such as (lambda (m) (m::f)) will not infer to a type if that's the whole expression,
+    -- but `(map (lambda (m) (m::f)) [k])` should
+    NModRef m ifs -> case _locElem checkty of
+      TyModRef (MConcrete mn) -> do
         let newVar = Var irn i
         let ifSet = S.fromList ifs
         if mn `S.isSubsetOf` ifSet  then
-          pure (TyModRef mn, newVar, [])
+          pure (TyModRef (MConcrete mn), newVar, [])
         else
           throwTypecheckError i $ ModuleLacksImplementedInterfaces m (ifSet `S.difference` mn)
-      v -> do
+      _ -> do
           let implInterfacesSet = S.fromList ifs
-          unify i v (TyModRef implInterfacesSet)
-          pure (TyModRef implInterfacesSet, Var irn i, [])
-    _ -> error "TODO :: dynref not supported"
-  -- Todo: lambda checking cancan be a bit better.
-  term@(IR.Lam _ _ i) -> do
-    traceM "in checkTy lam"
-    tup <- inferTerm term
-    unify i (view _1 tup) checkty
-    pure tup
+          unify checkty (Located i (TyModRef (MConcrete implInterfacesSet)))
+          pure (TyModRef (MConcrete implInterfacesSet), Var irn i, [])
+    NDynRef (DynamicRef fnToCall r) -> do
+      views tcVarEnv (`RAList.lookup` r) >>= \case
+        Just (NonGeneric (TyModRef (MConcrete mrefs))) -> do
+          (Located i' ty) <- over locElem liftType <$> findSig (S.toList mrefs)
+          unify checkty (Located i' ty)
+          let newVar = Var irn i
+          pure (ty, newVar, [])
+          where
+          findSig [] = throwTypecheckError i (ModuleReferenceDoesNotHaveMatchingFunction irn)
+          findSig (m:ms) = uses tcInterfaceDefns (M.lookup (QualifiedName fnToCall m)) >>= \case
+            Just fn -> pure fn
+            Nothing -> findSig ms
+        Just _ -> throwTypecheckError i (ModuleReferenceNotRefined irn)
+        Nothing ->
+          throwTypecheckError i $ InvariantUnboundTermVariable n
+  (IR.Lam nts body i) ->do
+    nts' <- traverse argToTypedArg nts
+    checkFun nts' (_locElem checkty) (NE.toList nts') []
+    where
+    checkFun nts' (TyFun argTy ret) (p:ps) acc = do
+      unify (Located (_locLocation checkty) argTy) (Located (_targInfo p) (_targType p))
+      checkFun nts' ret ps (NonGeneric argTy:acc)
+    -- We're out of lambda arguments, so they've been all popped in the env
+    -- Straightforward checking case
+    checkFun nts' ret [] acc = do
+      (ty, body', preds) <- locally tcVarEnv (RAList.fromList acc RAList.++) $ checkTermType (ret <$ checkty) body
+      let lam' = Lam (NE.toList nts') body' i
+          rtype = foldr TyFun ty (_targType <$> nts')
+      pure (rtype, lam', preds)
+    -- This case is more interesting.
+    -- It's possible that the `checkty` is not a `TyFun`, possibly because it's the result of
+    -- a fresh type variable introduced somewhere, but it may happen at any point along the function, so
+    -- in this case we fall back into "inference mode" for the rest of the lambda arguments
+    checkFun nts' cty remainingArgs acc = do
+      let env' = RAList.fromList $ (NonGeneric . _targType <$> reverse remainingArgs) ++ acc
+      (ty, body', preds) <- locally tcVarEnv (env' RAList.++) $ inferTerm body
+      unify (cty <$ checkty) (Located i (foldr TyFun ty (_targType <$> remainingArgs)))
+      let lam' = Lam (NE.toList nts') body' i
+          rtype = foldr TyFun ty (_targType <$> nts')
+      pure (rtype, lam', preds)
   IR.Let (Arg txt m_ty largInfo) e1 e2 i -> do
-    traceM "in checkTy let"
-    case m_ty of
-      Just lty -> do
-        let lty' = liftCoreType lty
-        let ltys = TypeScheme [] [] lty'
-        (_, e1', pe1) <- checkTermType lty' e1
-        (_, e2', pe2) <-
-          locally tcVarEnv (RAList.cons ltys) $ checkTermType checkty e2
-        let term' = Let (TypedArg txt lty' largInfo) e1' e2' i
-        pure (checkty, term', pe1 ++ pe2)
-      Nothing -> do
-        enterLevel
-        (te1, e1', pe1) <- inferTerm e1
-        leaveLevel
-        -- Note:
-        -- (ts, e1Qual, deferred) <- generalizeWithTerm te1 pe1 e1'
-        (te2, e2', pe2) <-
-          locally tcVarEnv (RAList.cons (TypeScheme [] [] te1)) $ checkTermType checkty e2
-        let term' = Let (TypedArg txt te1 largInfo) e1' e2' i
-        pure (te2, term', pe1 ++ pe2)
+    (tye1, e1', pe1) <- case m_ty of
+        Just lty -> do
+          lty' <- liftCoreType largInfo lty
+          checkTermType (Located largInfo lty') e1
+        Nothing -> inferTerm e1
+    (te2, e2', pe2) <- locally tcVarEnv (RAList.cons (NonGeneric tye1)) $ checkTermType checkty e2
+    let term' = Let (TypedArg txt tye1 largInfo) e1' e2' i
+    pure (te2, term', pe1 ++ pe2)
   term@(IR.App _ _ i) -> do
     (termTy, term', preds) <- inferTerm term
-    unify i termTy checkty
+    unify (Located i termTy) checkty
     pure (termTy, term', preds)
   IR.Sequence l r i -> do
     (_, l', pl) <- inferTerm l
-    (_, r', pr) <- checkTermType checkty r
-    pure (checkty, Sequence l' r' i, pl ++ pr)
+    (ty, r', pr) <- checkTermType checkty r
+    pure (ty, Sequence l' r' i, pl ++ pr)
   IR.BuiltinForm cond i -> over _2 (`BuiltinForm` i) <$>
     case cond of
       CAnd e1 e2 -> do
-        unify i checkty TyBool
-        (_, e1', pe1) <- checkTermType TyBool e1
-        (_, e2', pe2) <- checkTermType TyBool e2
+        unify checkty (Located i TyBool)
+        (_, e1', pe1) <- checkTermType (Located i TyBool) e1
+        (_, e2', pe2) <- checkTermType (Located i TyBool) e2
         pure (TyBool, CAnd e1' e2', pe1 ++ pe2)
       COr e1 e2 -> do
-        unify i checkty TyBool
-        (_, e1', pe1) <- checkTermType TyBool e1
-        (_, e2', pe2) <- checkTermType TyBool e2
+        unify checkty (Located i TyBool)
+        (_, e1', pe1) <- checkTermType (Located i TyBool) e1
+        (_, e2', pe2) <- checkTermType (Located i TyBool) e2
         pure (TyBool, COr e1' e2', pe1 ++ pe2)
       CIf c e1 e2 -> do
-        (_, c', pc) <- checkTermType TyBool c
+        (_, c', pc) <- checkTermType (Located i TyBool) c
         (_, e1', pe1) <- checkTermType checkty e1
         (_, e2', pe2) <- checkTermType checkty e2
-        pure (checkty, CIf c' e1' e2', pc ++ pe1 ++ pe2)
+        pure (_locElem checkty, CIf c' e1' e2', pc ++ pe1 ++ pe2)
       CEnforce bExpr strExpr -> do
-        (_, bExpr', pe1) <- checkTermType TyBool bExpr
-        (_, strExpr', pe2) <- checkTermType TyString strExpr
+        unify (Located i TyBool) checkty
+        (_, bExpr', pe1) <- checkTermType (Located i TyBool)  bExpr
+        (_, strExpr', pe2) <- checkTermType (Located i TyString) strExpr
         pure (TyBool, CEnforce bExpr' strExpr', pe1 ++ pe2)
       CEnforceOne o li -> do
-        unify i checkty TyBool
-        (_, o', pe1) <- checkTermType TyString o
-        (_, li', pe2) <- checkTermType (TyList TyBool) li
+        unify (Located i TyBool) checkty
+        (_, o', pe1) <- checkTermType (Located i TyString) o
+        (_, li', pe2) <- checkTermType (Located i (TyList TyBool)) li
         pure (TyBool, CEnforceOne o' li', pe1 ++ pe2)
       CTry catchE tryE -> do
         (_, catchE', pe1) <- checkTermType checkty catchE
         (_, tryE', pe2) <- checkTermType checkty tryE
-        pure (checkty, CTry catchE' tryE', pe1 ++ pe2)
+        pure (_locElem checkty, CTry catchE' tryE', pe1 ++ pe2)
       CWithCapability ct body -> do
-        (_, ct', pe1) <- checkTermType TyCapToken ct
+        (_, ct', pe1) <- checkTermType (Located i TyCapToken) ct
         (_, body', pe2) <- checkTermType checkty body
-        pure (checkty, CWithCapability ct' body', pe1 ++ pe2)
+        pure (_locElem checkty, CWithCapability ct' body', pe1 ++ pe2)
       CCreateUserGuard c -> case c of
         IR.App{} -> do
-          unify i checkty TyGuard
+          unify checkty (Located i TyGuard)
           (t, c', pe1) <- inferTerm c
-          pure (TyGuard, CCreateUserGuard c', Pred (IsValue t) : pe1)
+          -- Note: The `isValue` constraint here means that the type is most certainly
+          -- not a partial application
+          pure (TyGuard, CCreateUserGuard c', Located i (IsValue t) : pe1)
         _ -> throwTypecheckError i $ InvariantOther "create-user-guard must take a singular app form"
   IR.Builtin b i -> do
-    let tyImported = typeOfBuiltin b
-    (ty, tvs, preds) <- instantiateImported tyImported i
-    unify i checkty ty
+    tyImported <- typeOfBuiltin i b
+    (ty, tvs, preds) <- instantiateImported i tyImported
+    unify checkty (Located i ty)
     let term = Builtin b i
     let term' = case TyAppVar <$> tvs of
             [] -> term
@@ -1849,178 +1943,151 @@ checkTermType checkty = \case
     --   pure (tv, Constant lit i, [p])
     _ -> do
       let ty = typeOfLit lit
-      unify i checkty ty
+      unify (Located i ty) checkty
       pure (ty, Constant lit i, [])
-  IR.ListLit tes i -> case checkty of
+  IR.ListLit tes i -> case _locElem checkty of
     TyList ty -> do
-      liTup <- traverse (checkTermType ty) tes
+      liTup <- traverse (checkTermType (ty <$ checkty)) tes
       let preds = concat (view _3 <$> liTup)
           term' = ListLit ty (view _2 <$> liTup) i
       pure (TyList ty, term', preds)
     _ -> do
       tup <- inferTerm (IR.ListLit tes i)
-      unify i (view _1 tup) checkty
+      unify (Located i (view _1 tup)) checkty
       pure tup
-  -- IR.Try errcase bodycase i -> do
-  --   (_, err', p1) <- checkTermType checkty errcase
-  --   (_, body', p2) <- checkTermType checkty bodycase
-  --   pure (checkty, Try err' body' i, p1 ++ p2)
   IR.Nullary term i -> inferTerm (IR.Nullary term i)
   IR.ObjectLit fieldMap i -> do
-    traceM "inferring object lit"
     m <- traverse (\(f, t) -> (f,) <$> inferTerm t) fieldMap
-    traceM "done inferring nested objs"
     let objTyMap = view _1 <$> M.fromList m
         objTerms = over _2 (view _2) <$> m
         objTy = TyObject (RowConcrete objTyMap)
         preds = concat (view (_2._3) <$> m)
-    unify i checkty objTy
-    traceM "unifying row"
+    unify (Located i objTy) checkty
     pure (objTy, ObjectLit objTerms i, preds)
-  IR.InlineValue _ _ -> error "InlineValue not supported"
+  IR.InlineValue _ _ -> error "todo: better error"
 
 
--- -- Todo: bidirectionality
 inferTerm
   :: (TypeOfBuiltin b)
   => IR.Term Name IR.Type b i
-  -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
+  -> InferM s i (TCType s, TCTerm s b i, [TCPred i s])
 inferTerm = \case
   IR.Var irn@(Name n nk) i -> case nk of
     NBound u -> do
       views tcVarEnv (`RAList.lookup` u) >>= \case
         Just nty -> do
-          traceM "inferring local var"
           let newVar = Var irn i
-          (rty, term', preds) <- instantiateWithTerm nty newVar
+          (rty, term', preds) <- instantiateWithTerm i nty newVar
           pure (rty, term', preds)
         Nothing ->
           throwTypecheckError i $ InvariantUnboundTermVariable n
     NTopLevel mn mh -> do
       let fqn = FullyQualifiedName mn n mh
-      use (tcFree . at fqn) >>= \case
-        Just nty -> do
-          (rty, tyvars, preds) <- instantiateImported nty i
-          let newVar = Var irn i
-          case tyvars of
-            [] -> pure (rty, newVar, preds)
-            (x:xs) -> pure (rty, TyApp newVar (TyAppVar x :| fmap TyAppVar xs) i, preds)
-        _ ->
-          throwTypecheckError i $ InvariantUnboundFreeVariable fqn
-    NModRef _ ifs -> case ifs of
-      [iface] -> do
+      nty <- lookupDefnType i fqn
+      (rty, tyvars, preds) <- instantiateImported i nty
+      let newVar = Var irn i
+      case tyvars of
+        [] -> pure (rty, newVar, preds)
+        (x:xs) -> pure (rty, TyApp newVar (TyAppVar x :| fmap TyAppVar xs) i, preds)
+    NModRef _ ifs -> do
         let v' = Var irn i
-        pure (TyModRef (S.singleton iface), v', [])
-      [] -> error "Module reference does not implement any interfaces"
-      _ -> error "Cannot infer module reference "
-    NDynRef (DynamicRef m r) -> error "dynref"
+        pure (TyModRef (MConcrete (S.fromList ifs)), v', [])
+    NDynRef (DynamicRef fnToCall r) -> do
+      views tcVarEnv (`RAList.lookup` r) >>= \case
+        Just (NonGeneric (TyModRef (MConcrete mrefs))) -> do
+          ty <- findSig (S.toList mrefs)
+          let newVar = Var irn i
+          pure (liftType (_locElem ty), newVar, [])
+          where
+          findSig [] = throwTypecheckError i (ModuleReferenceDoesNotHaveMatchingFunction irn)
+          findSig (m:ms) = uses tcInterfaceDefns (M.lookup (QualifiedName fnToCall m)) >>= \case
+            Just fn -> pure fn
+            Nothing -> findSig ms
+        Just _ -> throwTypecheckError i (ModuleReferenceNotRefined irn)
+        Nothing ->
+          throwTypecheckError i $ InvariantUnboundTermVariable n
   IR.Lam nts e i -> do
-    traceM "In inferTerm Lam"
-    -- let names = fst <$> nts
-    ntys <- traverse withTypeInfo nts
-    -- Todo: bidirectionality
+    ntys <- traverse argToTypedArg nts
     let m = RAList.fromList (reverse (typedArgToTypeScheme <$> (NE.toList ntys)))
     (ty, e', preds) <- locally tcVarEnv (m RAList.++) $ inferTerm e
     let rty = foldr TyFun ty (_targType <$> ntys)
     pure (rty, Lam (NE.toList ntys) e' i, preds)
-    where
-    withTypeInfo (Arg n p i') = case p of
-      Just ty -> pure (TypedArg n (liftCoreType ty) i')
-      Nothing -> do
-        ty <- TyVar <$> newTypeVar TyKind
-        pure $ TypedArg n ty i'
   IR.App te apps i -> do
     (ty, retTerm, preds) <- inferApply (Apply te apps i)
     pure (ty, retTerm, preds)
   IR.Let (Arg n mty arg_info) e1 e2 i -> do
-    traceM $ "in infer let " <> show n
     enterLevel
     (te1, e1', pe1) <- case mty of
       Nothing -> inferTerm e1
-      Just ty -> checkTermType (liftCoreType ty) e1
+      Just ty -> do
+        ty' <- liftCoreType arg_info ty
+        checkTermType (Located arg_info ty') e1
     leaveLevel
-    te1Dbg <- _dbgType te1
-    traceM $ "in infer let type" <> show te1Dbg
     let tsArg = TypeScheme [] [] te1
-    -- (ts, e1Qual, deferred) <- generalizeWithTerm te1 pe1 e1'
     (te2, e2', pe2) <- locally tcVarEnv (RAList.cons tsArg) $ inferTerm e2
     pure (te2, Let (TypedArg n te1 arg_info) e1' e2' i, pe1 ++ pe2)
   IR.Sequence e1 e2 i -> do
     (_, e1', pe1) <- inferTerm e1
     (te2, e2', pe2) <- inferTerm e2
     pure (te2, Sequence e1' e2' i, pe1 ++ pe2)
-  -- Todo: Here, convert to dictionary
   IR.BuiltinForm cond i -> over _2 (`BuiltinForm` i) <$>
     case cond of
       CAnd e1 e2 -> do
-        (_, e1', pe1) <- checkTermType TyBool e1
-        (_, e2', pe2) <- checkTermType TyBool e2
+        (_, e1', pe1) <- checkTermType (Located i TyBool) e1
+        (_, e2', pe2) <- checkTermType (Located i TyBool) e2
         pure (TyBool, CAnd e1' e2', pe1 ++ pe2)
       COr e1 e2 -> do
-        (_, e1', pe1) <- checkTermType TyBool e1
-        (_, e2', pe2) <- checkTermType TyBool e2
+        (_, e1', pe1) <- checkTermType (Located i TyBool) e1
+        (_, e2', pe2) <- checkTermType (Located i TyBool) e2
         pure (TyBool, COr e1' e2', pe1 ++ pe2)
       CIf c e1 e2 -> do
-        (_, c', pc) <- checkTermType TyBool c
+        (_, c', pc) <- checkTermType (Located i TyBool) c
         (te1, e1', pe1) <- inferTerm e1
         (te2, e2', pe2) <- inferTerm e2
-        unify i te1 te2
+        unify (Located i te1) (Located i te2)
         pure (te1, CIf c' e1' e2', pc ++ pe1 ++ pe2)
       CEnforce e str -> do
-        (_, e', pe1) <- checkTermType TyBool e
-        (_, str', pe2) <- checkTermType TyString str
+        (_, e', pe1) <- checkTermType (Located i TyBool) e
+        (_, str', pe2) <- checkTermType (Located i TyString) str
         pure (TyBool, CEnforce e' str', pe1 ++ pe2)
       CEnforceOne o li -> do
-        (_, o', pe1) <- checkTermType TyString o
-        (_, li', pe2) <- checkTermType (TyList TyBool) li
+        (_, o', pe1) <- checkTermType (Located i TyString) o
+        (_, li', pe2) <- checkTermType (Located i (TyList TyBool)) li
         pure (TyBool, CEnforceOne o' li', pe1 ++ pe2)
       CTry catchE tryE -> do
         (tyCatch, catchE', pe1) <- inferTerm catchE
         (tyTry, tryE', pe2) <- inferTerm tryE
-        unify i tyCatch tyTry
+        unify (Located i tyCatch) (Located i tyTry)
         pure (tyCatch, CTry catchE' tryE', pe1 ++ pe2)
       CWithCapability ct body -> do
-        (_, ct', pe1) <- checkTermType TyCapToken ct
+        (_, ct', pe1) <- checkTermType (Located i TyCapToken) ct
         (rty, body', pe2) <- inferTerm body
         pure (rty, CWithCapability ct' body', pe1 ++ pe2)
       CCreateUserGuard c -> case c of
         IR.App{} -> do
           (t, c', pe1) <- inferTerm c
-          pure (TyGuard, CCreateUserGuard c', Pred (IsValue t) : pe1)
+          pure (TyGuard, CCreateUserGuard c', Located i (IsValue t) : pe1)
         _ -> throwTypecheckError i $ InvariantOther "create-user-guard must take a singular app form"
   IR.Builtin b i -> do
-    let tyImported = typeOfBuiltin b
-    (ty, tvs, preds) <- instantiateImported tyImported i
+    tyImported <- typeOfBuiltin i b
+    (ty, tvs, preds) <- instantiateImported i tyImported
     let term = Builtin b i
     let term' = case TyAppVar <$> tvs of
             [] -> term
             (x:xs) -> TyApp term (x :| xs) i
     pure (ty, term', preds)
-  -- TODO: note,
-  -- for this to work, we have to have proper bidirectionality working, including scoped type variables working fine
-  IR.Constant lit i -> case lit of
-    -- LInteger{} -> do
-    --   tv <- TyVar . (`TypeVar` TyKind) <$> newTvRef
-    --   let p = Pred (Num tv)
-    --   pure (tv, Constant lit i, [p])
-    _ ->
+  IR.Constant lit i ->
       pure (typeOfLit lit, Constant lit i, [])
   IR.ListLit li i -> do
     tv <- TyVar . (`TypeVar` TyKind) <$> newTvRef
-    liTup <- traverse inferTerm li
+    liTup <- traverse (checkTermType (Located i tv)) li
     let preds = concat (view _3 <$> liTup)
-    traverse_ (\(t,_, _) -> unify i tv t) liTup
     pure (TyList tv, ListLit tv (view _2 <$> liTup) i, preds)
-  -- IR.Try e1 e2 i -> do
-  --   (te1, e1', p1) <- inferTerm e1
-  --   (te2, e2', p2)<- inferTerm e2
-  --   unify i te1 te2
-  --   pure (te1, Try e1' e2' i, p1 ++ p2)
   IR.Nullary e i -> do
     (te', e', p) <- inferTerm e
     pure (TyNullary te', Lam [] e' i, p)
   IR.ObjectLit fieldMap i -> do
-    m <- traverse (\(f, t) -> (f,) <$> inferTerm t) fieldMap
+    m <- (traverse._2) inferTerm fieldMap
     let objTyMap = view _1 <$> M.fromList m
         objTerms = over _2 (view _2) <$> m
         objTy = TyObject (RowConcrete objTyMap)
@@ -2031,35 +2098,29 @@ inferTerm = \case
 inferApply
   :: TypeOfBuiltin b
   => Apply (IRTerm b i) i
-  -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
+  -> InferM s i (TCType s, TCTerm s b i, [TCPred i s])
 inferApply (Apply (IR.Builtin (toSpecialOverload -> Just b) bi) args i) = do
   inferCoreBuiltinOverload i (b, bi) args
 inferApply (Apply fun args i) = case args of
   [] -> do
-    traceM "inferring app case 1"
     tv1 <- TyVar . (`TypeVar` TyKind) <$> newTvRef
     (tfun, fun', pe1) <- inferTerm fun
-    unify i (TyNullary tv1) tfun
+    unify (Located i (TyNullary tv1)) (Located (view IR.termInfo fun) tfun)
     pure (tv1, App fun' [] i, pe1)
   h:hs -> do
-    traceM "inferring app case 2"
     (tfun, te', pe1) <- inferTerm fun
-    traceM "inferring fn caller"
     (rty, xs, ps) <- foldlM inferFunctionArgs (tfun,[], []) (h:hs)
-    traceM "inferred function args"
     let term' = App te' (reverse xs) i
     pure (rty, term', pe1 ++ ps)
     where
     inferFunctionArgs (ta, xs, ps) fnArg = case ta of
       TyFun arg ret -> do
-        traceM "inferring function args case 1"
-        (_, x', p) <- checkTermType arg fnArg
+        (_, x', p) <- checkTermType (Located (view IR.termInfo fun) arg) fnArg
         pure (ret, x':xs, ps ++ p)
       _ -> do
-        traceM "inferring function args case 2"
         tv1 <- TyVar . (`TypeVar` TyKind) <$> newTvRef
         (tArg, fnArg', predsArg) <- inferTerm fnArg
-        unify i ta (TyFun tArg tv1)
+        unify (Located i ta) (Located (view IR.termInfo fnArg) (TyFun tArg tv1))
         pure (tv1,fnArg':xs,ps ++ predsArg)
 
 inferCoreBuiltinOverload
@@ -2067,20 +2128,20 @@ inferCoreBuiltinOverload
   => i
   -> (SpecialOverload, i)
   -> [IRTerm b i]
-  -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
+  -> InferM s i (TCType s, TCTerm s b i, [TCPred i s])
 inferCoreBuiltinOverload info (b, bi) args =
   inferCoreBuiltinOverload' b args
   where
   inferCoreBuiltinOverload' FormatOverload [x, IR.ListLit lis _li] = do
     (ty, x', p1) <- inferTerm x
-    unify info ty TyString
+    unify (Located info ty) (Located info TyString)
     inferred <- traverse inferTerm lis
-    let constrs = concat [ (Pred (Show t):preds) | (t, _, preds) <- inferred ]
+    let constrs = concat [ (Located bi (Show t):preds) | (t, _, preds) <- inferred ]
     let li' = view _2 <$> inferred
     let retTerm = Typed.Format x' li' info
     pure (TyString, retTerm, p1 ++ constrs)
   inferCoreBuiltinOverload' AccessOverload (IR.Constant (LString field) _:xs) = do
-    (ty, tvs, preds) <- instantiateImported (objAccessType (Field field)) bi
+    (ty, tvs, preds) <- instantiateImported bi (objAccessType (Field field))
     (rty, xs', ps) <- foldlM inferFunctionArgs (ty, [], []) xs
     let term' = applyTypeVars (ObjectOp (ObjAccess (Field field)) info) bi tvs
     pure (rty, Typed.App term' (reverse xs') info, preds ++ ps)
@@ -2088,34 +2149,37 @@ inferCoreBuiltinOverload info (b, bi) args =
     (t1, x', px) <- inferTerm x
     (t2, y', py) <- inferTerm y
     (tyAdd, tvs, preds)  <- case (t1, t2) of
-      (TyObject{}, _) -> instantiateImported addObjType bi
-      (_, TyObject{}) -> instantiateImported addObjType bi
-      _ -> instantiateImported (typeOfBuiltin CoreAdd) bi
+      (TyObject{}, _) -> instantiateImported bi addObjType
+      (_, TyObject{}) -> instantiateImported bi addObjType
+      _ -> do
+        ty <- typeOfBuiltin bi CoreAdd
+        instantiateImported bi ty
     tv <- TyVar <$> newTypeVar TyKind
-    unify info tyAdd (t1 :~> t2 :~> tv)
+    unify (Located info tyAdd) (Located info (t1 :~> t2 :~> tv))
     -- TODO: this needs to be turned into a special form for sure
     let retTerm = Typed.App (applyTypeVars (Typed.Builtin (review _CoreBuiltin CoreAdd) bi) bi tvs)  [x', y'] info
     pure (tv, retTerm, px ++ py ++ preds)
   inferCoreBuiltinOverload' (specialOverLoadToCoreBuiltin -> b') xs = do
-    (ty, tvs, preds) <- instantiateImported (typeOfBuiltin b') bi
+    builtinTyScheme <- typeOfBuiltin bi b'
+    (ty, tvs, preds) <- instantiateImported bi builtinTyScheme
     (rty, xs', ps) <- foldlM inferFunctionArgs (ty, [], []) xs
     let term = applyTypeVars (Builtin (review _CoreBuiltin b') bi) bi tvs
     pure (rty, Typed.App term (reverse xs') info, preds ++ ps)
   inferFunctionArgs (ta, xs, ps) fnArg = case ta of
     TyFun arg ret -> do
-      (_, x', p) <- checkTermType arg fnArg
+      (_, x', p) <- checkTermType (Located bi arg) fnArg
       pure (ret, x':xs, ps ++ p)
     _ -> do
       tv1 <- TyVar . (`TypeVar` TyKind) <$> newTvRef
       (tArg, fnArg', predsArg) <- inferTerm fnArg
-      unify info ta (TyFun tArg tv1)
+      unify (Located info ta) (Located (view IR.termInfo fnArg) (TyFun tArg tv1))
       pure (tv1,fnArg':xs,ps ++ predsArg)
 
   objAccessType field =
     let z1 = RowVariable 1 "z"
         tfield = TypeVariable 0 "t"
         concreteRow = M.singleton field (TyVar tfield)
-        constr = Pred $ RoseSubRow (RoseRowTy (RowConcrete concreteRow)) (RoseRowTy (RowVar z1))
+        constr = RoseSubRow (RoseRowTy (RowConcrete concreteRow)) (RoseRowTy (RowVar z1))
     in TypeScheme [z1, tfield] [constr] (TyObject (RowVar z1) :~> TyVar tfield)
   addObjType =
     let z1 = RowVariable 2 "z1"
@@ -2123,7 +2187,7 @@ inferCoreBuiltinOverload info (b, bi) args =
         z3 = RowVariable 0 "z3"
         constrL = RoseRowCat (RoseRowTy (RowVar z1)) (RoseRowTy (RowVar z2))
         constrR = RoseRowTy (RowVar z3)
-        constr = Pred $ RoseRowEq constrL constrR
+        constr = RoseRowEq constrL constrR
     in
       TypeScheme [z1, z2, z3] [constr] (TyObject (RowVar z1) :~> TyObject (RowVar z2) :~> TyObject (RowVar z3))
 
@@ -2133,19 +2197,15 @@ applyTypeVars term i = \case
   (x:xs) -> TyApp term (TyAppVar x :| (TyAppVar <$> xs)) i
 
 
-enforceTypeIsPresent :: Maybe IR.Type -> Type a
-enforceTypeIsPresent = \case
-  Just ty -> liftCoreType ty
-  _ -> error "pact-core requires type annotations"
-
-enforceArgType :: Arg IR.Type i -> InferM s b i (TypedArg (Type (TCTypeVar s)) i)
-enforceArgType (Arg n mty i) =
+argToTypedArg :: Arg IR.Type i -> InferM s i (TypedArg (Type (TCTypeVar s)) i)
+argToTypedArg (Arg n mty i) =
   case mty of
     Nothing -> do
       tv <- newTypeVar TyKind
       pure $ TypedArg n (TyVar tv) i
-    Just ty ->
-     pure $ TypedArg n (liftCoreType ty) i
+    Just ty -> do
+      ty' <- liftCoreType i ty
+      pure $ TypedArg n ty' i
 
 -- -- Todo: generic types?
 -- -- We can't generalize yet since
@@ -2155,58 +2215,96 @@ inferDefun
   => ModuleName
   -> ModuleHash
   -> IR.Defun Name IR.Type b i
-  -> InferM s b i (TypedDefun b i)
+  -> InferM s i (TypedDefun b i)
 inferDefun mn mh (IR.Defun spec dfargs term info) = do
-  traceM $ "Inferring defun" <> show (() <$ spec)
   enterLevel
   let name = _argName spec
-  typedArgs <- traverse enforceArgType dfargs
-  spec' <- enforceArgType spec
+  typedArgs <- traverse argToTypedArg dfargs
+  spec' <- argToTypedArg spec
   let dfTy = case typedArgs of
         [] -> TyNullary (_targType spec')
         _ -> foldr TyFun (_targType spec') (_targType <$> typedArgs)
   (termTy, term', preds) <- inferTerm term
   leaveLevel
-  traceM "done inferring defun"
-  -- checkReducible info preds
-  -- fail "typeclass constraints not supported in defun"
-  unify info dfTy termTy
-  traceM "unification no links"
-  (tys@(TypeScheme tvs _ ty), tcterm, deferred) <- generalizeWithTerm termTy preds term'
-  tyDbged <- _dbgType ty
-  varsDbged <- traverse _dbgVar tvs
-  traceM $ "term gen worked " <> show varsDbged <> show tyDbged
+  unify (Located info dfTy) (Located (view termInfo term') termTy)
+  (tys, tcterm, deferred) <- generalizeWithTerm termTy preds term'
   deferred' <- reduce info deferred
-  when (deferred' /= []) $ do
-    deferredDbg <- traverse _dbgPred deferred
+  unless (null deferred') $ do
+    deferredDbg <- traverse _dbgPred deferred'
     throwTypecheckError info $ CannotResolveConstraints deferredDbg
   debruijnizedTypeScheme <- debruijnizeTypeScheme info tys
-  t' <- _dbgType ty
-  traceM $ "here2 " <> show t'
   -- fterm <- noTyVarsinTerm info term'
   fterm <- debruijnizeTermTypes info tcterm
   let deleteArgTypes (TypedArg n _ i) = Arg n Nothing i
-  tcFree %= M.insert (FullyQualifiedName mn name mh) debruijnizedTypeScheme
+  tcFree %= M.insert (FullyQualifiedName mn name mh) (NotIndexed debruijnizedTypeScheme)
   pure (Defun name (deleteArgTypes <$> typedArgs) debruijnizedTypeScheme fterm info)
+
+-- Defpacts will not be allowed to not
+inferDefPact
+  :: TypeOfBuiltin builtin
+  => ModuleName
+  -> ModuleHash
+  -> IR.DefPact Name IR.Type builtin info
+  -> InferM s info (DefPact Name DebruijnTypeVar builtin info)
+inferDefPact mn mh (IR.DefPact spec args steps info) = do
+  -- First, we ignore the defpact return type. There's really no point in it,
+  -- it simply restricts what we can infer, and I suspect most defpacts will _not_ typecheck like this.
+  args' <- traverse enforceArgType args
+  let tys = RAList.fromList (reverse (NonGeneric . liftType . _targType <$> args'))
+  let stepsWithIx = NE.zip steps (NE.fromList [0..])
+  steps' <- forM stepsWithIx $ \(step, i) -> case step of
+    IR.Step term -> do
+      (ty, term', preds) <-
+        locally tcStepCtx (const (StepIndex i))
+        $ locally tcVarEnv (tys RAList.++)
+        $ inferTerm term
+      ty' <- ensureNoTyVars info ty
+      p <- reduce info preds
+      unless (null p) $ do
+        p' <- traverse _dbgPred p
+        throwTypecheckError info (CannotResolveConstraints p')
+      term'' <- debruijnizeTermTypes info term'
+      pure (ty', Step term'', i)
+    IR.StepWithRollback s rb -> do
+      (ty, s', preds) <-
+        locally tcStepCtx (const (StepIndex i))
+        $ locally tcVarEnv (tys RAList.++)
+        $ inferTerm s
+      ty' <- ensureNoTyVars info ty
+      (_, rb', preds') <- locally tcStepCtx (const (StepIndex i))
+        $ locally tcVarEnv (tys RAList.++)
+        $ inferTerm rb
+      p <- reduce info (preds ++ preds')
+      unless (null p) $ do
+        p' <- traverse _dbgPred p
+        throwTypecheckError info (CannotResolveConstraints p')
+      s'' <- debruijnizeTermTypes info s'
+      rb'' <- debruijnizeTermTypes info rb'
+      pure (ty', StepWithRollback s'' rb'', i)
+    _ -> error "LegacyStep forms are not supported, and cannot appear in the repl"
+  let types = IntMap.fromList [(i, ty) | (ty, _, i) <- NE.toList steps']
+  tcFree %= M.insert (FullyQualifiedName mn (_argName spec) mh) (IndexedDefpactStepType types)
+  pure (DefPact (_argName spec) args' types (view _2 <$> steps') info)
+
 
 inferDefConst
   :: ModuleName
   -> ModuleHash
   -> IR.DefConst Name IR.Type b i
-  -> InferM s b i (TypedDefConst b i)
+  -> InferM s i (TypedDefConst b i)
 inferDefConst mn mh (IR.DefConst spec cv info) = case cv of
   IR.EvaledConst v -> do
     let name = _argName spec
     pvt <- inferPactValue info v
-    let dcTy' = liftCoreType <$> (_argType spec)
-    _ <- traverse (unify info pvt) dcTy'
+    dcTy' <- traverse (liftCoreType info) (_argType spec)
+    _ <- traverse (unify (Located info pvt) . Located info) dcTy'
     rty <- ensureNoTyVars info (maybe pvt id dcTy')
-    tcFree %= M.insert (FullyQualifiedName mn name mh) (TypeScheme [] [] rty)
+    tcFree %= M.insert (FullyQualifiedName mn name mh) (NotIndexed (NonGeneric rty))
     pure (DefConst name rty v info)
   _ -> do
     throwTypecheckError info $ InvariantDefconstNotEvaluated $ FullyQualifiedName mn (_argName spec) mh
 
-inferPactValue :: i -> PactValue -> InferM s b i (TCType s)
+inferPactValue :: i -> PactValue -> InferM s i (TCType s)
 inferPactValue i = \case
   PLiteral l -> pure $ typeOfLit l
   PGuard _ -> pure $ TyGuard
@@ -2215,14 +2313,14 @@ inferPactValue i = \case
       traverse (inferPactValue i) o
   PList l -> do
     v <- TyVar . (`TypeVar` TyKind) <$> newTvRef
-    _ <- traverse (inferPactValue i >=> unify i v) l
+    _ <- traverse (inferPactValue i >=> unify (Located i v) . Located i) l
     pure (TyList v)
-  PModRef mr -> pure $ TyModRef (_mrImplemented mr)
+  PModRef mr -> pure $ TyModRef (MConcrete (_mrImplemented mr))
   PCapToken _ ->
     pure $ TyCapToken
   PTable tbl -> do
     let (IR.Schema _ schema) = _tvSchema tbl
-    let schemaTys = liftCoreType <$> schema
+    schemaTys <- traverse (liftCoreType i) schema
     pure $ TyTable $ RowConcrete $ schemaTys
   PTime _ -> pure $ TyTime
 
@@ -2232,12 +2330,12 @@ inferDefCap
   => ModuleName
   -> ModuleHash
   -> IR.DefCap Name IR.Type b i
-  -> InferM s b i (TypedDefCap b i)
+  -> InferM s i (TypedDefCap b i)
 inferDefCap mn mh (IR.DefCap spec args term meta info) = do
   let name = _argName spec
   enterLevel
-  retArg <- enforceArgType spec
-  args' <- traverse enforceArgType args
+  retArg <- argToTypedArg spec
+  args' <- traverse argToTypedArg args
   let rty' = _targType retArg
   let fnCapTy = case args of
         [] -> TyNullary rty'
@@ -2245,7 +2343,7 @@ inferDefCap mn mh (IR.DefCap spec args term meta info) = do
   let m = RAList.fromList (reverse (typedArgToTypeScheme <$> args'))
   (termTy, term', preds) <- locally tcVarEnv (m RAList.++) $ inferTerm term
   leaveLevel
-  unify info fnCapTy (set returnType termTy fnCapTy)
+  unify (Located info fnCapTy) (Located info (set returnType termTy fnCapTy))
   -- Note: This can have some kind of gnarly consequences if for whatever reason there is a constraint that
   -- the return type requires.
   --
@@ -2256,13 +2354,13 @@ inferDefCap mn mh (IR.DefCap spec args term meta info) = do
 
   (tys, tcterm, deferred) <- generalizeWithTerm tygen preds term'
   reduced <- reduce info deferred
-  when (reduced /= []) $ do
+  unless (null reduced) $ do
     deferred' <- traverse _dbgPred deferred
     throwTypecheckError info $ CannotResolveConstraints deferred'
   debruijnizedTypeScheme <- debruijnizeTypeScheme info tys
   fterm <- debruijnizeTermTypes info tcterm
 
-  tcFree %= M.insert (FullyQualifiedName mn name mh) debruijnizedTypeScheme
+  tcFree %= M.insert (FullyQualifiedName mn name mh) (NotIndexed debruijnizedTypeScheme)
   let deleteArgTypes (TypedArg n _ i) = Arg n Nothing i
 
   pure (DefCap name (deleteArgTypes <$> args') debruijnizedTypeScheme fterm meta info)
@@ -2271,102 +2369,87 @@ inferTable
   :: ModuleName
   -> ModuleHash
   -> IR.DefTable Name i
-  -> InferM s b i (DefTable i)
+  -> InferM s i (DefTable i)
 inferTable mn mh (IR.DefTable tn (IR.ResolvedTable (IR.Schema qn schema)) info) = do
-  let schema' = liftCoreType <$> schema
-  tcFree %= M.insert (FullyQualifiedName mn tn mh) (TypeScheme [] [] (TyTable (RowConcrete (liftType <$> schema'))))
+  schema' <- traverse (liftCoreType info) schema
+  let rty = TyTable (RowConcrete (liftType <$> schema'))
+  tcFree %= M.insert (FullyQualifiedName mn tn mh) (NotIndexed ((NonGeneric rty)))
   pure (DefTable tn (Schema qn schema') info)
 
-inferDefSchema :: IR.DefSchema IR.Type info -> DefSchema ty info
-inferDefSchema (IR.DefSchema n ds i) = DefSchema n (liftCoreType <$> ds) i
+inferDefSchema :: IR.DefSchema IR.Type info -> InferM s info (DefSchema info)
+inferDefSchema (IR.DefSchema n ds i) = DefSchema n <$> traverse (liftCoreType i) ds <*> pure i
 
 inferDef
   :: TypeOfBuiltin b
   => ModuleName
   -> ModuleHash
   -> IR.Def Name IR.Type b i
-  -> InferM s b i (TypedDef b i)
+  -> InferM s i (TypedDef b i)
 inferDef mn mh = \case
   IR.Dfun d -> Dfun <$> inferDefun mn mh d
   IR.DConst d -> DConst <$> inferDefConst mn mh d
   IR.DCap dc -> DCap <$> inferDefCap mn mh dc
   IR.DTable tbl -> DTable <$> inferTable mn mh tbl
-  IR.DSchema s -> pure $ DSchema (inferDefSchema s)
-  IR.DPact{} -> error "todo: defpacts"
+  IR.DSchema s -> DSchema <$> (inferDefSchema s)
+  IR.DPact dp -> DPact <$> inferDefPact mn mh dp
+
+enforceArgType :: Arg IR.Type i -> InferM s i (TypedArg (Type Void) i)
+enforceArgType (Arg n ty i) = case ty of
+  Just ty' -> TypedArg n <$> liftCoreType i ty' <*> pure i
+  Nothing -> throwTypecheckError i ArgumentRequiresTypeAnnotation
+
+inferIfDefun :: ModuleName -> IR.IfDefun IR.Type info -> InferM s info (IfDefun info)
+inferIfDefun mn (IR.IfDefun spec args info) = do
+  spec' <- enforceArgType spec
+  args' <- traverse enforceArgType args
+  let rtype = case args' of
+        [] -> TyNullary (_targType spec')
+        _ -> foldr TyFun (_targType spec') (_targType <$> args')
+  let defunQn = QualifiedName (_targName spec') mn
+  tcInterfaceDefns %= M.insert defunQn (Located info rtype)
+  pure $ IfDefun spec' args' rtype info
+
+inferIfDefcap :: ModuleName -> IR.IfDefCap Name IR.Type info -> InferM s info (IfDefCap info)
+inferIfDefcap mn (IR.IfDefCap spec args meta info) = do
+  spec' <- enforceArgType spec
+  args' <- traverse enforceArgType args
+  case meta of
+    -- Desugaring enforces `ix` is in bounds of `args`
+    DefManaged (DefManagedMeta (idx, _) (BareName n)) -> do
+      let argTy = _targType (args' !! idx)
+      let expectedTy = argTy :~> argTy :~> argTy
+      uses tcInterfaceDefns (M.lookup (QualifiedName n mn)) >>= \case
+        Just (Located i ty) -> when (expectedTy /= ty) $
+          throwTypecheckError info $ InvalidDefcapManagerFun (Located info expectedTy) (Located i ty)
+        Nothing -> error "impossible: guaranteed by desugar"
+    _ -> pure ()
+  let rtype = case args' of
+        [] -> TyNullary TyCapToken
+        _ -> foldr TyFun TyCapToken (_targType <$> args')
+  let defunQn = QualifiedName (_targName spec') mn
+  tcInterfaceDefns %= M.insert defunQn (Located info rtype)
+  pure $ IfDefCap spec' args' rtype meta info
 
 inferIfDef
-  :: IR.IfDef Name IR.Type b i
-  -> InferM s b' i (TypedIfDef b i)
-inferIfDef = error "todo: implement"
+  :: ModuleName
+  -> ModuleHash
+  -> IR.IfDef Name IR.Type b i
+  -> InferM s i (TypedIfDef b i)
+inferIfDef mn mh = \case
+  IR.IfDfun df -> IfDfun <$> inferIfDefun mn df
+  IR.IfDCap dc -> IfDCap <$> inferIfDefcap mn dc
+  IR.IfDConst dc -> IfDConst <$> inferDefConst mn mh dc
+  IR.IfDSchema dc -> IfDSchema <$> inferDefSchema dc
+  IR.IfDPact _ -> error "implement defpacts"
 
 inferModule
   :: TypeOfBuiltin b
   => IR.Module Name IR.Type b i
-  -> InferM s b i (TypedModule b i)
+  -> InferM s i (TypedModule b i)
 inferModule (IR.Module mname mgov defs blessed imports impl mh _ _ info) = do
   defs' <- traverse (inferDef mname mh) defs
   pure (Module mname mgov defs' blessed imports impl mh info)
 
--- inferInterface
---   :: TypeOfBuiltin b
---   => IRInterface b info
---   -> InferM s b' info (TypedInterface b info)
--- inferInterface (IR.Interface n defns h info) = do
---   defns' <- traverse inferIfDef defns
---   pure (Interface n defns' h info)
-
--- | Note: debruijnizeType will
--- ensure that terms that are generic will fail
--- inferTermNonGen
---   :: TypeOfBuiltin b
---   => IRTerm b i
---   -> InferM s b i (TypeScheme NamedDeBruijn, TypedTerm b i)
--- inferTermNonGen t = do
---   (ty, t', preds) <- inferTerm t
---   checkReducible (view IR.termInfo t) preds
---   tys <- ensureNoTyVars (view IR.termInfo t) ty
---   tt <- noTyVarsinTerm (view IR.termInfo t) t'
---   pure (TypeScheme [] [] tys, tt)
-
--- inferTermGen
---   :: TypeOfBuiltin b
---   => IRTerm b i
---   -> InferM s b' i (TypeScheme NamedDeBruijn, TypedGenTerm b i)
--- inferTermGen term = do
---   let info = view IR.termInfo term
---   enterLevel
---   (ty, term0 , preds) <- inferTerm term
---   leaveLevel
---   (tys', typedTerm, deferred) <- generalizeWithTerm ty preds term0
---   unless (null deferred) $ do
---       deferred' <- traverse _dbgPred deferred
---       throwTypecheckError (UnsupportedTypeclassGeneralization deferred') (view IR.termInfo term)
---   dbjTyScheme <- debruijnizeTypeScheme info tys'
---   dbjTerm <- debruijnizeTermTypes info typedTerm
---   pure (dbjTyScheme, dbjTerm)
-
--- inferTopLevel
---   :: TypeOfBuiltin b
---   => IRTopLevel b i
---   -> InferM s b i (TypedTopLevel b i)
--- inferTopLevel = \case
---   IR.TLModule m ->
---     TLModule <$> inferModule m
---   IR.TLTerm m -> TLTerm . snd <$> inferTermNonGen m
---   IR.TLInterface _i -> undefined
---   IR.TLUse tl i -> pure (TLUse tl i)
-
--- inferReplTopLevel
---   :: TypeOfBuiltin b
---   => IR.ReplTopLevel Name IR.Type b i
---   -> InferM s b i (TypedReplTopLevel b i)
--- inferReplTopLevel = \case
---   IR.RTLDefun dfn -> do
---     dfn' <- inferDefun replModuleName replModuleHash dfn
---     pure (RTLDefun dfn')
---   IR.RTLDefConst dconst -> do
---     dc <- inferDefConst replModuleName replModuleHash dconst
---     pure (RTLDefConst dc)
 
 -- | Transform types into their debruijn-indexed version
 -- Essentially: Start at depth 0:
@@ -2380,17 +2463,10 @@ inferModule (IR.Module mname mgov defs blessed imports impl mh _ _ info) = do
 --  renameType : (Type, Γ, Int) -> IxType
 --  renameType (a, env, DEPTH) = DEPTH - env(a) - 1
 --  .. other recursive cases are straightforward
---
---  Quip: when we debruijnize types, we expect no impredicative polymorphism atm,
---  thus we will fail on universially quantified types found in application and
---  var binding sites.
---  The typechecker does not spit out impredicative polymorphism, but while
---  it would be trivial to support their renaming here, I'd rather fail
---  for now as the typechecker does not support it and it functions as a sanity check
 debruijnizeTermTypes
-  :: forall s b b' i. i
+  :: i
   -> TCTerm s b i
-  -> InferM s b' i (Term Name DebruijnTypeVar b i)
+  -> InferM s i (Term Name DebruijnTypeVar b i)
 debruijnizeTermTypes info = dbj [] 0
   where
   debruijnizeTypeApp env = \case
@@ -2405,13 +2481,11 @@ debruijnizeTermTypes info = dbj [] 0
           TyAppType <$> debruijnizeType info env ty
         LinkRow row ->
           TyAppRow <$> debruijnizeRowCtor info env row
+        LinkRef r ->
+          pure (TyAppRef r)
     TyAppType ty -> TyAppType <$> debruijnizeType info env ty
     TyAppRow row -> TyAppRow <$> debruijnizeRowCtor info env row
-  dbj
-    :: [(TCTypeVar s, DebruijnTypeVar)]
-    -> DeBruijn
-    -> TCTerm s b i
-    -> InferM s b' i (Term Name DebruijnTypeVar b i)
+    TyAppRef r -> pure (TyAppRef r)
   dbj env depth = go
     where
     go = \case
@@ -2458,8 +2532,6 @@ debruijnizeTermTypes info = dbj [] 0
         pure (ObjectOp o i)
       Format o o' i ->
         Format <$> dbj env depth o <*> traverse (dbj env depth) o' <*> pure i
-      -- CapabilityForm cf i ->
-      --   CapabilityForm <$> traverse (dbj env depth) cf <*> pure i
       Constant l i -> pure (Constant l i)
       ObjectLit l i ->
         ObjectLit <$> (traversed._2) go l <*> pure i
@@ -2469,107 +2541,63 @@ nameTvs
   :: i
   -> DeBruijn
   -> (TCTypeVar s, DeBruijn)
-  -> InferM s b i DebruijnTypeVar
+  -> InferM s i DebruijnTypeVar
 nameTvs info depth (tv@(TypeVar _ k), i) = readTvRef tv >>= \case
   Bound n _ ->
     pure (TypeVar (NamedDeBruijn (depth - i - 1) n) k)
   _ ->
     throwTypecheckError info $ InvariantUnboundTypeVariable "_todo"
 
+-- Todo:
 ensureNoTyVars
-  :: i
+  :: forall i s a
+  .  i
   -> TCType s
-  -> InferM s b i (Type a)
-ensureNoTyVars i = \case
-  TyVar n -> readTvRef n >>= \case
-    LinkTy ty -> ensureNoTyVars i ty
-    LinkRow row -> ensureNoTyVars i (TyObject row)
-    -- LinkCap r -> ensureNoTyVars i (TyCapToken r)
-    _ -> do
-      dbg <- _dbgType (TyVar n)
-      throwTypecheckError i $ DisallowedGenericSignature dbg
-  TyPrim p -> pure (TyPrim p)
-  TyFun l r -> TyFun <$> ensureNoTyVars i l <*> ensureNoTyVars i r
-  TyList l -> TyList <$> ensureNoTyVars i l
-  TyModRef mr -> pure (TyModRef mr)
-  TyObject r -> TyObject <$> ensureNoTvRowCtor r
-  TyTable r -> TyTable <$> ensureNoTvRowCtor r
-  TyNullary r -> TyNullary <$> ensureNoTyVars i r
-  TyCapToken -> pure TyCapToken
-    -- CapVar rv -> readTvRef rv >>= \case
-    --   LinkCap t -> ensureNoTyVars i (TyCapToken t)
-    --   _ -> error "inferred generic signature"
-    -- CapConcrete fq -> pure (TyCapToken (CapConcrete fq))
+  -> InferM s i (Type a)
+ensureNoTyVars i ty = go ty
   where
+  go = \case
+    TyVar n -> readTvRef n >>= \case
+      LinkTy t -> ensureNoTyVars i t
+      LinkRow row -> ensureNoTyVars i (TyObject row)
+      -- LinkCap r -> ensureNoTyVars i (TyCapToken r)
+      _ -> disallowedGenericSig
+    TyFun l r -> TyFun <$> ensureNoTyVars i l <*> ensureNoTyVars i r
+    TyList l -> TyList <$> ensureNoTyVars i l
+    TyModRef mr -> TyModRef <$> ensureNoTvMRef mr
+    TyObject r -> TyObject <$> ensureNoTvRowCtor r
+    TyTable r -> TyTable <$> ensureNoTvRowCtor r
+    TyNullary r -> TyNullary <$> ensureNoTyVars i r
+    TyCapToken -> pure TyCapToken
+    TyPrim p -> pure (TyPrim p)
+  disallowedGenericSig :: forall b. InferM s i b
+  disallowedGenericSig = do
+    tyDbg <- _dbgType ty
+    throwTypecheckError i $ DisallowedGenericSignature tyDbg
+  ensureNoTvMRef (MRefVar mv) = readTvRef mv >>= \case
+    LinkRef mr -> pure (MConcrete mr)
+    _ -> disallowedGenericSig
+  ensureNoTvMRef (MConcrete mv) = pure (MConcrete mv)
   ensureNoTvRowCtor (RowVar rv) = readTvRef rv >>= \case
     LinkRow row -> ensureNoTvRowCtor row
-    _ -> error "inferred generic signature"
+    _ -> disallowedGenericSig
   ensureNoTvRowCtor (RowConcrete row) =
-    RowConcrete <$> traverse (ensureNoTyVars i) row
-
--- ensureNoTyVarsPred
---   :: i
---   -> TCPred s
---   -> InferM s b i (Pred (Type NamedDeBruijn))
--- ensureNoTyVarsPred i (Pred tc) =
---   Pred <$> traverse (ensureNoTyVars i) tc
-
--- noTyVarsinTerm
---   :: i
---   -> TCTerm s b' i
---   -> InferM s b i (TypedTerm b' i)
--- noTyVarsinTerm info = \case
---   Var n i ->
---     pure (Var n i)
---   Lam nts e i ->
---     Lam <$> (traversed.argType) (ensureNoTyVars info) nts <*> noTyVarsinTerm info e <*> pure i
---   App e args i ->
---     App <$> noTyVarsinTerm info e <*> traverse (noTyVarsinTerm info) args <*> pure i
---   Let n e1 e2 i ->
---     Let <$> argType (ensureNoTyVars i) n
---         <*> noTyVarsinTerm info e1
---         <*> noTyVarsinTerm info e2
---         <*> pure i
---   Builtin (b, ty, p) i -> do
---     ty' <- traverse (ensureNoTyVars info) ty
---     p' <- traverse (ensureNoTyVarsPred info) p
---     pure $ Builtin (b, ty', p') i
---   TyAbs _ns _e _i ->
---     error "Generic terms are disabled"
---   Constant l i ->
---     pure (Constant l i)
---   TyApp l tys i ->
---     TyApp
---       <$> noTyVarsinTerm info l
---       <*> traverse (ensureNoTyVars info) tys
---       <*> pure i
---   Sequence e1 e2 i ->
---     Sequence <$> noTyVarsinTerm info e1 <*> noTyVarsinTerm info e2 <*> pure i
---   BuiltinForm c i ->
---     Conditional <$> traverse (noTyVarsinTerm info) c <*> pure i
---   ListLit ty li i ->
---     ListLit <$> ensureNoTyVars info ty <*> traverse (noTyVarsinTerm info) li <*> pure i
---   Try e1 e2 i ->
---     Try <$> noTyVarsinTerm info e1 <*> noTyVarsinTerm info e2 <*> pure i
-  -- CapabilityForm cf i ->
-  --   CapabilityForm <$> traverse (noTyVarsinTerm info) cf <*> pure i
-  -- ObjectLit fields i ->
-  --   ObjectLit <$> (traversed._2) (noTyVarsinTerm info) fields <*> pure i
+    RowConcrete <$> traverse go row
 
 debruijnizeTypeScheme
   :: i
   -> TypeScheme (TCTypeVar s)
-  -> InferM s b i (TypeScheme DebruijnTypeVar)
+  -> InferM s i (TypeScheme DebruijnTypeVar)
 debruijnizeTypeScheme i (TypeScheme tvs preds t) = do
     let len = fromIntegral (length tvs)
     let ixs = [0.. len - 1]
     names <- traverse (nameTvs i len) (zip tvs ixs)
     let env = zip tvs names
     t' <- debruijnizeType i env t
-    preds' <- traverse (debruijnizePred i env) preds
+    preds' <- traverse (debruijnizeBuiltinTC i env) preds
     pure (TypeScheme names preds' t')
 
-debruijnizeBuiltinTC :: i -> [(TCTypeVar s, DebruijnTypeVar)] -> BuiltinTC (TCTypeVar s) -> InferM s b i (BuiltinTC DebruijnTypeVar)
+debruijnizeBuiltinTC :: i -> [(TCTypeVar s, DebruijnTypeVar)] -> BuiltinTC (TCTypeVar s) -> InferM s i (BuiltinTC DebruijnTypeVar)
 debruijnizeBuiltinTC i env = \case
   Eq ty -> Eq <$> debruijnizeType i env ty
   Ord ty -> Ord <$> debruijnizeType i env ty
@@ -2587,21 +2615,18 @@ debruijnizeBuiltinTC i env = \case
     RoseRowEq <$> debruijnizeRoseRow i env r1 <*> debruijnizeRoseRow i env r2
 
 debruijnizePred
-  :: i
-  -> [(TCTypeVar s, DebruijnTypeVar)]
-  -> TCPred s
-  -> InferM s b i (Pred DebruijnTypeVar)
-debruijnizePred i env (Pred tc) =
-  Pred <$> debruijnizeBuiltinTC i env tc
+  :: [(TCTypeVar s, DebruijnTypeVar)]
+  -> TCPred i s
+  -> InferM s i (Pred i DebruijnTypeVar)
+debruijnizePred env (Located i tc) =
+  Located i <$> debruijnizeBuiltinTC i env tc
 
-
-  -- Pred <$> traverseTCType (debruijnizeType i env) tc
 
 debruijnizeType
   :: i
   -> [(TCTypeVar s, DebruijnTypeVar)]
   -> TCType s
-  -> InferM s b i (Type DebruijnTypeVar)
+  -> InferM s i (Type DebruijnTypeVar)
 debruijnizeType i env = go
   where
   go = \case
@@ -2613,20 +2638,33 @@ debruijnizeType i env = go
         Bound nraw _ ->
           throwTypecheckError i $ InvariantUnboundTypeVariable nraw
         LinkTy ty -> go ty
-        _ -> error "invariant failure: typevar as row"
+        _ -> wellKindedGuaranteed
     TyPrim p -> pure (TyPrim p)
     TyFun l r -> TyFun <$> go l <*> go r
     TyList l -> TyList <$> go l
-    TyModRef m -> pure (TyModRef m)
+    TyModRef m -> TyModRef <$> debruijnizeMRef i env m
     TyObject r -> TyObject <$> debruijnizeRowCtor i env r
     TyTable r -> TyTable <$> debruijnizeRowCtor i env r
     TyNullary t -> TyNullary <$> go t
     TyCapToken -> pure TyCapToken
 
+debruijnizeMRef :: i -> [(TypeVar (TvRef s), n)] -> MRef (TypeVar (TvRef s)) -> InferM s i (MRef n)
+debruijnizeMRef i env = \case
+  MRefVar rv -> case lookup rv env of
+    Just v -> pure (MRefVar v)
+    Nothing -> readTvRef rv >>= \case
+      Unbound nraw _ _ ->
+        throwTypecheckError i $ InvariantUnboundTypeVariable nraw
+      Bound nraw _ ->
+        throwTypecheckError i $ InvariantUnboundTypeVariable nraw
+      LinkRef r -> pure (MConcrete r)
+      _ -> wellKindedGuaranteed
+  MConcrete m -> pure (MConcrete m)
+
 debruijnizeRowCtor
   :: i
   -> [(TCTypeVar s, DebruijnTypeVar)]
-  -> TCRowCtor s -> InferM s b i (RowTy DebruijnTypeVar)
+  -> TCRowCtor s -> InferM s i (RowTy DebruijnTypeVar)
 debruijnizeRowCtor i env = \case
   RowVar rv ->  case lookup rv env of
     Just v -> pure (RowVar v)
@@ -2636,35 +2674,24 @@ debruijnizeRowCtor i env = \case
       Bound nraw _ ->
         throwTypecheckError i $ InvariantUnboundTypeVariable nraw
       LinkRow row -> debruijnizeRowCtor i env row
-      _ ->
-        error "invariant failure: Found type link in row position"
+      _ -> wellKindedGuaranteed
   RowConcrete r ->
     RowConcrete <$> traverse (debruijnizeType i env) r
 
-debruijnizeRoseRow :: i -> [(TCTypeVar s, DebruijnTypeVar)] -> RoseRow (TCTypeVar s) -> InferM s b i (RoseRow DebruijnTypeVar)
+debruijnizeRoseRow :: i -> [(TCTypeVar s, DebruijnTypeVar)] -> RoseRow (TCTypeVar s) -> InferM s i (RoseRow DebruijnTypeVar)
 debruijnizeRoseRow i env = \case
   RoseRowTy ty -> RoseRowTy <$> debruijnizeRowCtor i env ty
   RoseRowCat r1 r2 ->
     RoseRowCat <$> debruijnizeRoseRow i env r1 <*> debruijnizeRoseRow i env r2
 
--- -- -----------------------------------------
--- -- --- Built-in type wiring
--- -- ------------------------------------------
-
--- -- mkFree :: Loaded builtin info -> Map ModuleName (Map Text (Type Void))
--- -- mkFree loaded = let
--- --   tl = _loModules loaded
--- --   toTy d = (UndefName d, UndefType d)
--- --   mdefs =  Un_mDefs . _mdModule <$> tl
--- --   in M.fromList . fmap toTy <$> mdefs
 
 runInfer
-  :: InferM s b i a
-  -> ST s (Either (TypecheckError i) a, TCState b i)
+  :: InferM s i a
+  -> ST s (Either (TypecheckError i) a, TCState i)
 runInfer (InferM act) = do
   uref <- newSTRef 0
   lref <- newSTRef 1
-  let env = TCEnv uref mempty lref
+  let env = TCEnv uref mempty lref NotInStep False
   runStateT (runReaderT (runExceptT act) env) def
 
 defFqns :: IR.EvalDef b i -> [FullyQualifiedName]
@@ -2686,49 +2713,3 @@ typecheckModule i mn = do
   let allDeps = M.toList $ M.fromList (toFqDep (IR._mName m) (IR._mHash m) <$> (IR._mDefs m)) <> deps
   let sccInput = flattenSCCs $ stronglyConnComp [ (defn, fqn, defFqns defn)  | (fqn, defn) <- allDeps]
   pure $ fst $ runST (runInfer (traverse (inferDef (IR._mName m) (IR._mHash m))  sccInput))
-
-
--- runInferTerm
---   :: TypeOfBuiltin b
---   => Loaded b i
---   -> TCState b i
---   -> IRTerm b i
---   -> Either (TypecheckFailure i) (TypeScheme NamedDeBruijn, TypedTerm b i)
--- runInferTerm lo tcs term0 =
---   fst $ runST $ runInfer lo tcs (inferTermNonGen term0)
-
--- runInferTermNonGen
---   :: TypeOfBuiltin b
---   => Loaded b' i
---   -> IRTerm b i
---   -> Either (PactError i) (TypeScheme NamedDeBruijn, TypedTerm b i)
--- runInferTermNonGen loaded term0 = runST $
---   runInfer loaded $ inferTermNonGen term0
-
--- runInferModule
---   :: TypeOfBuiltin b
---   => Loaded b i
---   -> TCState b i
---   -> IRModule b i
---   -> (Either (TypecheckFailure i) (TypedModule b i), TCState b i)
--- runInferModule lo tcs m =
---   runST $ runInfer lo tcs (inferModule m)
-
--- runInferTopLevel
---   :: TypeOfBuiltin b
---   => Loaded b i
---   -> TCState b i
---   -> IR.TopLevel Name IR.Type b i
---   -> (Either (TypecheckFailure i) (TypedTopLevel b i), TCState b i)
--- runInferTopLevel l tcs tl =
---   runST $ runInfer l tcs (inferTopLevel tl)
-
-
--- runInferReplTopLevel
---   :: TypeOfBuiltin b
---   => Loaded b i
---   -> TCState b i
---   -> IR.ReplTopLevel Name IR.Type b i
---   -> (Either (TypecheckFailure i) (TypedReplTopLevel b i), TCState b i)
--- runInferReplTopLevel l tcs tl =
---   runST $ runInfer l tcs (inferReplTopLevel tl)
