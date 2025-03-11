@@ -338,7 +338,7 @@ pattern RoseConcrete :: Map Field (Type n) -> RoseRow n
 pattern RoseConcrete o = RoseRowTy (RowConcrete o)
 
 pattern RoseVar :: n -> RoseRow n
-pattern RoseVar v = (RoseRowTy (RowVar v))
+pattern RoseVar v = RoseRowTy (RowVar v)
 
 {-# COMPLETE RoseVar, RoseConcrete, RoseRowCat #-}
 

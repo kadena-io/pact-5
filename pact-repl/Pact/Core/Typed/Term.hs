@@ -18,6 +18,7 @@ module Pact.Core.Typed.Term
  , IfDefun(..)
  , IfDefCap(..)
  , IfDef(..)
+ , IfDefPact(..)
  , TopLevel(..)
  , ReplTopLevel(..)
  , Literal(..)
@@ -158,10 +159,10 @@ data DefPact name tyname builtin info
 -- (defconst <name>(:<ty>)* <expr>)
 -- Todo: ConstVal is not precisely type-safe.
 -- Maybe a different IR is needed here?
-data DefConst ty info
+data DefConst info
   = DefConst
   { _dcName :: Text
-  , _dcType :: Type ty
+  , _dcType :: Type Void
   , _dcTerm :: PactValue
   , _dcInfo :: info
   } deriving (Show, Functor, Eq, Generic)
@@ -202,7 +203,7 @@ ordinaryDefPactStepExec (StepWithRollback expr _) = expr
 
 data Def name ty builtin info
   = Dfun (Defun name ty builtin info)
-  | DConst (DefConst ty info)
+  | DConst (DefConst info)
   | DCap (DefCap name ty builtin info)
   | DSchema (DefSchema info)
   | DTable (DefTable info)
@@ -241,21 +242,21 @@ data Module name tyname builtin info
   , _mInfo :: info
   } deriving (Show, Generic)
 
-data Interface ty info
+data Interface info
   = Interface
   { _ifName :: ModuleName
-  , _ifDefns :: [IfDef ty info]
+  , _ifDefns :: [IfDef info]
   , _ifImports :: [Import]
   , _ifHash :: ModuleHash
+  , _ifTxHash :: Hash
   , _ifInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
 data IfDefPact info
   = IfDefPact
   { _ifdpSpec :: TypedArg (Type Void) info
-  , _ifdpArgs :: [Arg Void info]
-  , _ifdpRType :: Type Void
-  , _ifDefcap :: DefCapMeta BareName
+  , _ifdpArgs :: [TypedArg (Type Void) info]
+  , _ifdpType :: Type Void
   , _ifdpInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
@@ -276,9 +277,9 @@ data IfDefCap info
   , _ifdcInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
-data IfDef ty info
+data IfDef info
   = IfDfun (IfDefun info)
-  | IfDConst (DefConst ty info)
+  | IfDConst (DefConst info)
   | IfDCap (IfDefCap info)
   | IfDPact (IfDefPact info)
   | IfDSchema (DefSchema info)
@@ -286,13 +287,13 @@ data IfDef ty info
 
 data TopLevel name tyname builtin info
   = TLModule (Module name tyname builtin info)
-  | TLInterface (Interface tyname info)
+  | TLInterface (Interface info)
   | TLTerm (Term name tyname builtin info)
   | TLUse Import info
   deriving (Show, Generic)
 
 data ReplTopLevel name ty builtin info
-  = RTLDefConst (DefConst ty info)
+  = RTLDefConst (DefConst info)
   | RTLDefun (Defun name ty builtin info)
   deriving (Show, Functor)
 
@@ -303,7 +304,7 @@ data ReplTopLevel name ty builtin info
 -- On-chain, core builtin-types
 type CoreEvalTerm tyname  i = Term Name tyname CoreBuiltin i
 type CoreEvalDefun tyname i = Defun Name tyname CoreBuiltin i
-type CoreEvalDefConst tyname i = DefConst tyname i
+type CoreEvalDefConst tyname i = DefConst i
 type CoreEvalDef tyname i = Def Name tyname CoreBuiltin i
 type CoreEvalModule tyname i = Module Name tyname CoreBuiltin i
 type CoreEvalTopLevel tyname i = TopLevel Name tyname CoreBuiltin i
@@ -352,7 +353,7 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Step name ty builti
     Step t -> parens ("step" <+> pretty t)
     StepWithRollback t1 t2 -> parens ("step-with-rollback" <+> pretty t1 <+> pretty t2)
 
-instance (Pretty ty) => Pretty (DefConst ty i) where
+instance Pretty (DefConst i) where
   pretty (DefConst n ty v _) =
     parens $ "defconst" <+> pretty n <> ":" <> pretty ty <+> pretty v
 
@@ -526,13 +527,13 @@ instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Def name ty b info)
 instance (NFData info) => NFData (DefSchema info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Defun name ty b info)
-instance (NFData ty, NFData info) => NFData (DefConst ty info)
+instance (NFData info) => NFData (DefConst info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (DefCap name ty b info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (DefPact name ty b info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Step name ty b info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Module name ty b info)
-instance (NFData ty, NFData info) => NFData (Interface ty info)
-instance (NFData ty, NFData info) => NFData (IfDef ty info)
+instance (NFData info) => NFData (Interface info)
+instance (NFData info) => NFData (IfDef info)
 instance (NFData info) => NFData (IfDefun info)
 instance (NFData info) => NFData (IfDefPact info)
 instance (NFData info) => NFData (IfDefCap info)
