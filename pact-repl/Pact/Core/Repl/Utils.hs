@@ -72,7 +72,6 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Errors
 import Pact.Core.Environment
-import Pact.Core.Type
 import Pact.Core.Builtin
 import Pact.Core.PactValue
 import Pact.Core.Debug
@@ -315,9 +314,12 @@ instance DebugPrintable 'ReplRuntime (ReplBuiltin CoreBuiltin) where
               liftIO $ do
                 putStrLn "----------- Parser output ----------------"
                 print (pretty term)
-          DPDesugar -> whenReplFlagSet ReplDebugDesugar $ case term of
-            Term.TLTerm t ->
-              liftIO $ do
-                putStrLn "----------- Desugar output ---------------"
-                print (pretty t)
-            _ -> pure ()
+          DPDesugar -> whenReplFlagSet ReplDebugDesugar $ do
+            let info = view Term.topLevelInfo term
+            replTraceLn' info "----------- Desugar output ---------------"
+            case term of
+              Term.TLTerm t ->
+                replTraceLn info t
+              Term.TLModule m ->
+                replTraceLn info m
+              _ -> pure ()

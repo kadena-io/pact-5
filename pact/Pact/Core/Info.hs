@@ -16,6 +16,8 @@ module Pact.Core.Info
  , spanInfoToLineInfo
  , FileLocSpanInfo(..)
  , HasSpanInfo(..)
+ , locLocation
+ , locElem
  ) where
 
 import Control.Lens
@@ -105,9 +107,10 @@ data Located i a
   = Located
   { _locLocation :: i
   , _locElem :: a }
-  deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+  deriving (Show, Eq, Ord, Functor, Foldable, Traversable, Generic, NFData)
 
 makeClassy ''SpanInfo
+makeLenses ''Located
 
 instance HasSpanInfo FileLocSpanInfo where
   spanInfo = lens _flsiSpan (\s i -> s { _flsiSpan = i })
@@ -117,3 +120,6 @@ instance Pretty FileLocSpanInfo where
 
 instance Default FileLocSpanInfo where
   def = FileLocSpanInfo "" def
+
+instance Pretty a => Pretty (Located i a) where
+  pretty (Located _ a) = pretty a

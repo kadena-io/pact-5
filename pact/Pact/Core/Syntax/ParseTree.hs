@@ -18,7 +18,7 @@ import qualified Data.List.NonEmpty as NE
 import GHC.Generics
 
 import Pact.Core.Literal
-import Pact.Core.Names
+import Pact.Core.Names hiding (Arg)
 import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
 
