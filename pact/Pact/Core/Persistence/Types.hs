@@ -14,6 +14,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 
 module Pact.Core.Persistence.Types
@@ -95,7 +96,8 @@ mdModuleHash f = \case
 -- | Data reflecting Key/Value storage in user-tables.
 newtype RowData
   = RowData { _unRowData :: Map Field PactValue }
-  deriving (Eq, Show, NFData)
+  deriving stock (Eq, Show)
+  deriving newtype NFData
 
 makePrisms ''RowData
 
@@ -129,7 +131,8 @@ instance NFData ExecutionMode
 
 -- | Identifier for transactions
 newtype TxId = TxId { _txId :: Word64 }
-    deriving (Eq,Ord, Show, NFData)
+    deriving stock (Eq,Ord,Show,Generic)
+    deriving newtype NFData
 
 -- | Transaction record.
 --
@@ -139,7 +142,9 @@ data TxLog v
   , _txKey :: !Text
   , _txValue :: !v
   }
-  deriving (Eq,Show,Functor, Foldable, Traversable)
+  deriving stock (Eq, Generic, Show, Functor, Foldable, Traversable)
+  deriving anyclass NFData
+
 
 hashTxLogs :: [TxLog ByteString] -> Hash
 hashTxLogs logs = pactHash $ mconcat
