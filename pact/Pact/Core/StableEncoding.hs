@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 --
@@ -12,10 +13,13 @@ module Pact.Core.StableEncoding
   , decodeStable
   , eitherDecodeStable
   , roundtripStable
-  , StableEncoding(..))
+  , StableEncoding(..)
+  , _StableEncoding
+  )
 where
 
 import Control.Applicative
+import Control.Lens(makePrisms)
 import Data.Bifunctor
 import Data.Text(Text)
 import Data.ByteString (ByteString)
@@ -836,3 +840,5 @@ instance JD.FromJSON (StableEncoding RowDataValue) where
           <$> (fmap _stableEncoding $ o JD..: "refName")
           <*> (maybe mempty (S.fromList . fmap _stableEncoding) <$> o JD..: "refSpec")
   {-# INLINE parseJSON #-}
+
+makePrisms ''StableEncoding
