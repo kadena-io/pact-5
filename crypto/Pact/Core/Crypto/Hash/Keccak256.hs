@@ -17,6 +17,7 @@ import Control.Exception.Safe (throwM, try)
 import Control.DeepSeq
 import Data.ByteString(ByteString)
 import Data.ByteString.Short qualified as BSS
+import Data.Coerce
 import Data.Hash.Class.Mutable (initialize, finalize, updateByteString)
 import Data.Hash.Internal.OpenSSL (OpenSslException(..))
 import Data.Hash.Keccak (Keccak256(..))
@@ -47,7 +48,7 @@ keccak256 bytesArray = unsafePerformIO $ do
         Right bytes -> do
           updateByteString @Keccak256 ctx bytes
     Keccak256 hash <- finalize ctx
-    pure (BSS.fromShort hash)
+    pure (BSS.fromShort $ coerce hash)
   case e of
     Left err
       | Just (OpenSslException msg) <- fromException err -> pure (Left (Keccak256OpenSslException msg))
