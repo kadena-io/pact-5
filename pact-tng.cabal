@@ -1,4 +1,4 @@
-cabal-version:       3.8
+cabal-version:       3.12
 name:                pact-tng
 version:             5.1
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
@@ -188,6 +188,7 @@ library pact-request-api
     Pact.Core.Crypto.WebAuthn.Cose.Registry
     Pact.Core.Crypto.WebAuthn.Cose.SignAlg
     Pact.Core.Crypto.WebAuthn.Cose.Verify
+  other-modules: PackageInfo_pact_tng
 
 library
   import: pact-common
@@ -203,9 +204,7 @@ library
     , happy:happy
 
   other-modules:
-    -- TODO: Uncomment once this is finally fixed
-    -- and stops crapping out both LSP and our CI:
-    -- PackageInfo_pact_tng
+    PackageInfo_pact_tng
     Paths_pact_tng
 
   exposed-modules:
@@ -279,7 +278,6 @@ library
     Pact.Core.IR.ConstEval
 
     Pact.Core.Trans.MPFR
-    Pact.Core.Version
 
     -- Serialization
     Pact.Core.Serialise
@@ -330,6 +328,8 @@ library pact-repl
     Pact.Core.IR.Eval.Direct.CoreBuiltin
     Pact.Core.IR.Eval.Direct.ReplBuiltin
     Pact.Core.IR.Eval.Direct.Types
+
+  other-modules: PackageInfo_pact_tng
 
   build-depends:
     , pact-tng
@@ -414,9 +414,7 @@ executable pact
 
   -- beware of the autogen modules. Remember to `cabal clean`!
   other-modules:
-    -- TODO: Uncomment once this is finally fixed
-    -- and stops crapping out both LSP and our CI,
-    -- PackageInfo_pact_tng
+    PackageInfo_pact_tng
     Paths_pact_tng
 
 benchmark bench

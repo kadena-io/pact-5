@@ -62,9 +62,10 @@ import Pact.Core.Gas
 import Pact.Core.Hash
 import Pact.Core.Namespace
 import Pact.Core.Persistence.Types
+    ( hashTxLogs, ExecutionMode(..), PactDb )
 import Pact.Core.SPV
 import Pact.Core.StableEncoding
-import qualified Pact.Core.Version as PI
+import qualified PackageInfo_pact_tng as PI
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as JE
 import qualified Pact.JSON.Legacy.Utils as JL

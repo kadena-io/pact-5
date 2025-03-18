@@ -24,7 +24,7 @@ import Pact.Core.Repl.Compile
 import Pact.Core.Environment
 import Pact.Core.Pretty
 import System.IO
-import qualified Pact.Core.Version as PI
+import qualified PackageInfo_pact_tng as PI
 import System.Directory
 import System.Exit(exitFailure, exitSuccess)
 import System.FilePath
@@ -85,7 +85,7 @@ checkNativeShadowingFlag :: O.Parser ReplOpts
 checkNativeShadowingFlag =
   OCheckNativeShadowing
     <$> O.strOption(O.metavar "FILE" <> O.long "check-shadowing" <> O.help "Run a native shadowing check over a particular .pact or .repl file")
- 
+
 argParser :: O.ParserInfo (Maybe ReplOpts)
 argParser = O.info (O.helper <*> replOpts)
             (O.fullDesc <> O.header "The Pact Smart Contract Language Interpreter")

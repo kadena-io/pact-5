@@ -43,7 +43,7 @@ import Pact.Core.Namespace
 import Pact.Core.ModRefs
 import Pact.Core.StableEncoding
 
-import qualified Pact.Core.Version as PI
+import qualified PackageInfo_pact_tng as PI
 import qualified Data.Version as V
 import qualified Data.Attoparsec.Text as A
 

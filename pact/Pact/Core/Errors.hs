@@ -203,7 +203,7 @@ import Data.List(intersperse)
 import Data.Default
 import GHC.TypeLits
 import qualified Data.Version as V
-import qualified Pact.Core.Version as PI
+import qualified PackageInfo_pact_tng as PI
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Pact.JSON.Decode as JD
