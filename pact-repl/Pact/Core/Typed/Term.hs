@@ -72,6 +72,7 @@ import Pact.Core.Typed.Type
 
 import qualified Pact.Core.Pretty as Pretty
 import qualified Data.Map.Strict as M
+import qualified Data.IntMap.Strict as IM
 import qualified Data.Set as S
 
 data TypeApp tyname
@@ -84,6 +85,7 @@ data TypeApp tyname
 data TypedObjectOp
   = ObjConcat
   | ObjAccess Field
+  | SortObj [Field]
   deriving (Eq, Show, Generic)
 
 -- | Typed pact core terms
@@ -314,6 +316,7 @@ instance Pretty TypedObjectOp where
   pretty = \case
     ObjConcat -> "+"
     ObjAccess f -> "at" <+> pretty f
+    SortObj fs -> "sort" <+> Pretty.braces (Pretty.hsep (pretty <$> fs))
 
 instance Pretty tyname => Pretty (TypeApp tyname) where
   pretty = \case
@@ -332,7 +335,9 @@ instance (Pretty name, Pretty ty, Pretty b) => Pretty (Defun name ty b i) where
     parens $ "defun" <+> pretty name <> ":" <> pretty ty
 
 instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefPact name ty b i) where
-  pretty _ = error "todo"
+  pretty (DefPact name _args tys _steps _info) =
+    let dpTypes = vsep [ "step" <+> pretty stepIx <+> "type:" <+> pretty ty | (stepIx, ty) <- IM.toList tys]
+    in "defpact" <+> pretty name <+> line <+> dpTypes
 
 instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefCap name ty b i) where
   pretty (DefCap name _args ty _ _ _) =

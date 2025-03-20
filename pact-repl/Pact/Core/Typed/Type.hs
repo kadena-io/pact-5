@@ -293,15 +293,17 @@ instance Pretty n => Pretty (Type n) where
     TyList n ->
       Pretty.brackets (pretty n)
     TyFun arg ret ->
-      Pretty.parens ("->" <+> pretty arg <+> pretty ret)
+      doParen arg (pretty arg) <+> "->" <+> pretty ret
+      where
+      doParen TyFun{} = Pretty.parens
+      doParen TyNullary{} = Pretty.parens
+      doParen _ = id
     TyNullary ret ->
       Pretty.parens ("=>" <+> pretty ret)
     TyObject m ->
       "object" <> Pretty.braces (pretty m)
-      -- Pretty.braces (Pretty.hsep (prettyObj <$> (M.toList m)))
     TyTable m ->
       "table" <> Pretty.braces (pretty m)
-      -- Pretty.braces (Pretty.hsep (prettyObj <$> (M.toList m)))
     TyModRef mn ->
       "module" <> Pretty.braces (pretty mn)
     TyCapToken -> "cap-token"
@@ -410,7 +412,7 @@ instance Pretty ty => Pretty (TypeScheme ty) where
         "forall"
           <+> Pretty.parens (Pretty.commaSep tvs)
           <> "."
-          <> if null preds then mempty else (" " <> Pretty.parens (Pretty.commaSep preds))
+          <> if null preds then mempty else (Pretty.space <> Pretty.parens (Pretty.commaSep preds) <+> "=>")
           <+> pretty ty
 
 pattern NonGeneric :: Type tyname -> TypeScheme tyname

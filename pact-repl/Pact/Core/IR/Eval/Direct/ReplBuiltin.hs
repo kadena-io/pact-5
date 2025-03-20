@@ -583,9 +583,11 @@ typecheck :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 typecheck info b _env = \case
   [VString s] -> case parseModuleName s of
     Just mn -> Typed.typecheckModule info mn >>= \case
-      Left (Typed.TypecheckError tcErr i) ->
+      Left tcErr -> do
+        pp <- Typed.renderTypecheckError tcErr
+        replTraceLn' info pp
         -- Todo: typechecking error should throw
-        throwExecutionError i (EvalError (T.pack (show tcErr)))
+        throwExecutionError info (EvalError pp)
       Right _defs -> do
         liftIO $ putStrLn $ T.unpack $ T.unlines (renderCompactText <$> (Typed._mDefs _defs))
         return (VString "typecheck success!")
