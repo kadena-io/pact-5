@@ -50,7 +50,8 @@ import qualified Data.Attoparsec.Text as A
 import Pact.Core.Repl.Utils
 import qualified Pact.Time as PactTime
 import Data.IORef
-import Pact.Core.Typed.Infer (typecheckModule)
+import qualified Pact.Core.Typed.Infer as Typed
+import qualified Pact.Core.Typed.Term as Typed
 
 prettyShowValue :: CEKValue b i m -> Text
 prettyShowValue = \case
@@ -610,10 +611,10 @@ load info b cont handler _env = \case
 typecheck :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 typecheck info b cont handler _env = \case
   [VString s] -> case parseModuleName s of
-    Just mn -> typecheckModule info mn >>= \case
-      Left tcErr ->
-        -- Todo: typechecking error should throw
-        throwExecutionError info (EvalError (T.pack (show tcErr)))
+    Just mn -> Typed.typecheckModule info mn >>= \case
+      Left tcErr -> do
+        pp <- Typed.renderTypecheckError tcErr
+        throwExecutionError info (EvalError pp)
       Right _ ->
         returnCEKValue cont handler (VString "typecheck success!")
     Nothing -> throwNativeExecutionError info b $ "invalid module name format"

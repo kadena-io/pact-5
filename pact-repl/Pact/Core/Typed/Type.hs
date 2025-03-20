@@ -320,7 +320,6 @@ data BuiltinTC n
   | Fractional (Type n)
   | EnforceRead (Type n)
   | IsValue (Type n)
-  | EqRow (RowTy n)
   | RoseSubRow (RoseRow n) (RoseRow n)
   | RoseRowEq (RoseRow n) (RoseRow n)
   deriving (Show, Eq, Generic)
@@ -380,7 +379,6 @@ instance (Pretty ty) => Pretty (BuiltinTC ty) where
     ListLike t -> "ListLike" <> Pretty.braces (pretty t)
     Fractional t -> "Fractional" <> Pretty.braces (pretty t)
     EnforceRead t -> "EnforceRead" <> Pretty.braces (pretty t)
-    EqRow t -> "EqRow" <> Pretty.braces (pretty t)
     IsValue t -> "IsValue" <> Pretty.braces (pretty t)
     RoseSubRow l r ->
       pretty l <+> "≼" <+> pretty r
@@ -429,7 +427,6 @@ traverseTCType f = \case
   Fractional t -> Fractional <$> f t
   EnforceRead t -> EnforceRead <$> f t
   IsValue t -> IsValue <$> f t
-  EqRow t -> EqRow <$> traverseRowTy f t
   RoseSubRow l r -> RoseSubRow <$> traverseRoseRowType f l <*> traverseRoseRowType f r
   RoseRowEq l r -> RoseRowEq <$> traverseRoseRowType f l <*> traverseRoseRowType f r
 

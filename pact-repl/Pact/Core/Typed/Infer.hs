@@ -98,9 +98,11 @@ type TCPred i s = Pred i (TCTypeVar s)
 type TCRowCtor s = RowTy (TCTypeVar s)
 type TCRoseRow s = RoseRow (TCTypeVar s)
 
--- | Our type for mutable type variable cases
---   A `Tv s` always gets created via `newTypeVar` as `Unbound`, and then
---   unification will modify it from `Unbound` to one of the `Link` types
+-- | Our type for mutable type variable cases.
+--   In other words, every unification variable generated starts out as a mutable ref to an `Unbound` and unification
+--   can update that reference to any of the `Link` types, as long as the corresponding `Link` update is well kinded.
+--
+--   A `Tv s` always gets created via `newTypeVar` as `Unbound` within a `TvRef s`
 data Tv s
   = Unbound !Text !Unique !Level
   | Bound !Text !Unique
@@ -109,12 +111,16 @@ data Tv s
   | LinkRef !(S.Set ModuleName)
   deriving (Eq)
 
+-- | The type of our mutable type variables. All new type variables generated in `newTypeVar` are
+--   TvRef
 -- Note: TyVar equality
 -- is reference equality
 newtype TvRef s =
   TvRef (STRef s (Tv s))
   deriving (Eq)
 
+-- | Our "step context", in other words, are we typechecking a defun or defcap,
+--   or are we typechecking a particular defpact step?
 data StepContext
   = NotInStep
   | StepIndex Int
@@ -133,19 +139,33 @@ data TCEnv s b i
   , _tcLevel :: STRef s Level
   -- ^ our mem region "level"
   , _tcStepCtx :: StepContext
-  -- ^
+  -- ^ The current "step context", which is primarily for DefPacts
   , _tcLoaded :: Loaded b i
+  -- ^ All Loaded names currently in scope, provided from EvalM
   , _tcInBranch :: Bool
+  -- ^ Are we typechecking in a branching expression?
+  -- This generally does not matter in most cases other than defpacts
   }
 
 makeLenses ''TCEnv
 
+-- | Our typechecking state, which tracks:
+--   - All currently typechecked definitions
+--   - Interfaces that are valid for typechecking
+--   - Interface definitions, for convenience and use during inference `n::f`
+--   - The current type of the "yield" in a defpact step, for use in typechecking
+--   - yield/resume pairs across defpacts
 data TCState s i
   = TCState
   { _tcFree :: Map FullyQualifiedName (DefnType (TypeVar NamedDeBruijn))
+  -- ^ Map from free variables (module definitions)
+  --   To their corresponding type
   , _tcInferredInterfaces :: Map ModuleName (Interface i)
+  -- ^ All interfaces that have been typechecked successfully
   , _tcInterfaceDefns :: Map QualifiedName (Located i (Type Void))
+  -- ^ Inferface vcall mapping to the corresponding type
   , _tcYieldTy :: Maybe (TCType s)
+  -- ^ The type of a previous "yield" call between steps
   }
   -- ^ Free variables
 
@@ -167,31 +187,58 @@ type TypedDef b i = Def Name DebruijnTypeVar b i
 
 type TypedModule b i = Module Name DebruijnTypeVar b i
 
+-- | Type for errors possible to emit during typechecking
 data TypecheckError i
   = UnificationFailure (Located i (Type Text)) (Located i (Type Text))
+  -- ^ Self explanatory. Means t1 ~ t2 does not hold.
   | RowUnificationFailure (Located i (RowTy Text)) (Located i (RowTy Text))
+  -- ^ Same as UnificationFailure but for rows specifically
   | InvariantRowInTypeVarPosition (RowTy Text) i
+  -- ^ Kind invariant failure. A type var is pointing to a row.
   | InvariantTypeInRowVarPosition (Type Text) i
+  -- ^ Kind invariant failure. A row var is pointing to a type
   | InvariantUnboundTypeVariable Text (Type Text) i
+  -- ^ Type variable is unbound
   | InvariantUnboundTermVariable Text i
+  -- ^ Term variable is unbound
   | InvariantUnboundFreeVariable FullyQualifiedName i
+  -- ^ Free variable is unbound
   | InvariantDefconstNotEvaluated FullyQualifiedName i
-  | InvariantOther Text i
+  -- ^ DefConst is not evaluated. This one is not possible to occur at all currently but
+  --   it can happen if the compiler stages aren't used properly
+  | UserGuardMustBeApp Text i
+  -- ^ Actually impossible, but same as case above. Desugar.hs guarantees this won't happen, but
+  --   if for whatever reason `Desugar` isn't used, then this is a possibility
   | ModuleLacksImplementedInterfaces ModuleName (S.Set ModuleName) i
+  -- ^ Self explanatory
   | ExpectedKind PactKind PactKind i
+  -- ^ Attempting to unify <expected> kind with <actual> kind. This also implies that <expected> != <actual>
   | InfiniteType (Located i (Type Text)) (Located i (Type Text))
-  | InfiniteRow (RowTy Text) (RowTy Text) i
+  -- ^ Attempted to create a type such as `a ~ a -> a`
+  | InfiniteRow (Located i (RowTy Text)) (Located i (RowTy Text))
+  -- ^ Same as infiniteType, but for rows, such as `a ~ {}
   | DisallowedGenericSignature (Type Text) i
+  -- ^ Generic signature is not allowed, so in other words, attempting to create a `defconst`
+  --   that cannot be statically typechecked
   | CannotUnifyWithBoundVariable Text i
+  -- ^ Attempting to perform unification with a bound variable.
   | CannotResolveConstraints [Pred i Text] i
+  -- ^ Failed to resolved typeclass constraints
   | CannotStaticallyDetermineRowOpSig Text i
-  | ArgumentRequiresTypeAnnotation i
+  -- ^ The signature of a function that uses row types was not able to be inferred.
+  --   To elaborate on this error: row operations require string literal, such as `(at "f")`.
+  --   They must be statically determined, so for example `(at s)` where `s` is a
+  --   calculated string cannot be inferred
+  | ArgumentRequiresTypeAnnotation Text i
+  -- ^ Parameter to a function requires a type argument. Primarily necessary for interfaces, which
+  --   we cannot infer a type for if it is not declared
   | InvalidDefcapManagerFun (Located i (Type Void)) (Located i (Type Void))
-  | ModuleReferenceNotRefined Name i
+  -- ^ Defcap manager function does not match the expected type
   | CannotDetermineDynamicInvoke Name Text i
-  | ModuleReferenceDoesNotHaveMatchingFunction Name i
+  -- ^ We cannot determine the type of a dynamic invoke `m::f` statically
   | TypecheckingDoesNotSupportType IR.Type i
-  | DefPactStepIndexOutOfBounds Int i
+  -- ^ A particular type is unsupported, such as `list` or `object` (Without schema)
+  | DefPactStepIndexOutOfBounds FullyQualifiedName Int i
   deriving (Show, Eq)
 
 -- | Our inference monad, where we can plumb through generalization "regions",
@@ -205,6 +252,7 @@ newtype InferM s b i a =
     , MonadError (TypecheckError i))
   via (ExceptT (TypecheckError i) (ReaderT (TCEnv s b i) (StateT (TCState s i) (ST s))))
 
+-- | Forms which are "special" and require specific overloading
 data SpecialOverload
   = AddOverload
   | AccessOverload
@@ -244,7 +292,7 @@ lookupDefnType info fqn =
       NotInStep -> pure $ NonGeneric $ liftType (im IntMap.! 0)
       StepIndex i -> case IntMap.lookup i im of
         Just ty -> pure $ NonGeneric $ liftType ty
-        Nothing -> throwTypecheckError (DefPactStepIndexOutOfBounds i info)
+        Nothing -> throwTypecheckError (DefPactStepIndexOutOfBounds fqn i info)
   _ ->
     throwTypecheckError $ InvariantUnboundFreeVariable fqn info
 
@@ -285,150 +333,168 @@ class (AsCoreBuiltin b, Show b, Pretty b) => TypeOfBuiltin b where
 instance TypeOfBuiltin CoreBuiltin where
   typeOfBuiltin :: i -> CoreBuiltin -> InferM s b i (TypeScheme DebruijnTypeVar)
   typeOfBuiltin info = \case
-    -- Add
+    -- Add functions
     -- (+) : forall a. Add a => a -> a -> a
     CoreAdd ->
       pure $ addBinopType
-    -- Num
+    -- Num functions
     -- (-) : forall a. Num a => a -> a -> a
-    -- (*) : forall a. Num a => a -> a -> a
-    -- (/) : forall a. Num a => a -> a -> a
-    -- negate : forall a. Num a => a -> a
-    -- abs : forall a. Num a => a -> a
-    -- (^) : forall a. Num a => a -> a -> a
     CoreSub ->
       pure numBinopType
+    -- (*) : forall a. Num a => a -> a -> a
     CoreMultiply ->
       pure numBinopType
+    -- (/) : forall a. Num a => a -> a -> a
     CoreDivide ->
       pure numBinopType
+    -- negate : forall a. Num a => a -> a
     CoreNegate ->
       pure unaryNumType
+    -- abs : forall a. Num a => a -> a
     CoreAbs ->
       pure unaryNumType
+    -- (^) : forall a. Num a => a -> a -> a
     CorePow ->
       pure numBinopType
     -- Boolean ops
     -- not : bool -> bool
     CoreNot ->
       pure $ NonGeneric (TyBool :~> TyBool)
-    -- Equality
+    -- Eq functions
     -- (=) : forall a. Eq a => a -> a -> bool
-    -- (!=) : forall a. Eq a => a -> a -> bool
     CoreEq ->
       pure eqTyp
+    -- (!=) : forall a. Eq a => a -> a -> bool
     CoreNeq ->
       pure eqTyp
-    -- Ord
+    -- Ord functions
     -- (>) : forall a. Ord a => a -> a -> bool
-    -- (>=) : forall a. Ord a => a -> a -> bool
-    -- (<) : forall a. Ord a => a -> a -> bool
-    -- (<=) : forall a. Ord a => a -> a -> bool
     CoreGT ->
       pure ordTyp
+    -- (>=) : forall a. Ord a => a -> a -> bool
     CoreGEQ ->
       pure ordTyp
+    -- (<) : forall a. Ord a => a -> a -> bool
     CoreLT ->
       pure ordTyp
+    -- (<=) : forall a. Ord a => a -> a -> bool
     CoreLEQ ->
       pure ordTyp
     -- Integer ops
     -- (&) : integer -> integer -> integer
-    -- (|) : integer -> integer -> integer
-    -- (xor) : integer -> integer -> integer
-    -- (~) : integer -> integer -> integer
-    -- shift : integer -> integer -> integer
-    -- mod : integer -> integer -> integer
     CoreBitwiseAnd ->
       pure binaryInt
+    -- (|) : integer -> integer -> integer
     CoreBitwiseOr ->
       pure binaryInt
+    -- (xor) : integer -> integer -> integer
     CoreBitwiseXor ->
       pure binaryInt
+    -- (~) : integer -> integer -> integer
     CoreBitwiseFlip ->
       pure unaryInt
+    -- shift : integer -> integer -> integer
     CoreBitShift ->
       pure binaryInt
+    -- mod : integer -> integer -> integer
     CoreMod ->
       pure binaryInt
     -- Rounding functions
     -- round : decimal -> integer
-    -- ceiling : decimal -> integer
-    -- floor : decimal -> integer
-    --
-    -- round-prec : decimal -> integer -> decimal
-    -- ceiling-prec : decimal -> integer -> decimal
-    -- floor-prec : decimal -> integer -> decimal
     CoreRound -> pure roundingFn
+    -- ceiling : decimal -> integer
     CoreCeiling -> pure roundingFn
+    -- floor : decimal -> integer
     CoreFloor -> pure roundingFn
+    -- round-prec : decimal -> integer -> decimal
     CoreRoundPrec -> pure roundingPrecFn
+    -- ceiling-prec : decimal -> integer -> decimal
     CoreCeilingPrec -> pure roundingPrecFn
+    -- floor-prec : decimal -> integer -> decimal
     CoreFloorPrec -> pure roundingPrecFn
     -- Fractional
-    -- exp : forall a. Fractional a -> a -> decimal
-    -- ln : forall a. Fractional a -> a -> decimal
-    -- sqrt : forall a. Fractional a -> a -> decimal
-    -- log-base : forall a. Fractional a -> a -> a -> decimal
+    -- exp : forall a. Fractional a => a -> decimal
     CoreExp ->
       pure unaryFractional
+    -- ln : forall a. Fractional a => a -> decimal
     CoreLn ->
       pure unaryFractional
+    -- sqrt : forall a. Fractional a => a -> decimal
     CoreSqrt ->
       pure unaryFractional
+    -- log-base : forall a. Fractional a => a -> a -> decimal
     CoreLogBase -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [Fractional a] (a :~> a :~> a)
     -- ListLike
+    -- length : forall a. ListLike a => a -> integer
     CoreLength -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [ListLike a] (a :~> TyInt)
+    -- take : forall a. ListLike a => integer -> a -> a
     CoreTake -> pure takeDropTy
+    -- drop : forall a. ListLike a => integer -> a -> a
     CoreDrop -> pure takeDropTy
+    -- concat : [string] -> string
+    -- todo: concat could most definitely be a `ListLike`
     CoreConcat ->
       pure $ NonGeneric (TyList TyString :~> TyString)
+    -- reverse : forall a. [a] -> [a]
     CoreReverse -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [] (TyList a :~> TyList a)
-    -- general
+    -- map: forall a b. (a -> b) -> [a] -> [b]
     CoreMap -> do
       let aVar = TypeVariable 1 "a"
           bVar = TypeVariable 0 "b"
           a = TyVar aVar
           b = TyVar bVar
       pure $ TypeScheme [aVar, bVar] [] ((a :~> b) :~> TyList a :~> TyList b)
+    -- filter : forall a. (a -> bool) -> [a] -> [a]
     CoreFilter -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [] ((a :~> TyBool) :~> TyList a :~> TyList a)
+    -- TODO: contains needs a row overload
+    -- contains: forall a. Eq a => a -> [a] -> bool
     CoreContains -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [Eq a] (a :~> TyList a :~> TyBool)
+    -- sort : forall a. Ord a => [a] -> [a]
     CoreSort -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [Ord a] (TyList a :~> TyList a)
+    -- sort for objects must look like
+    -- (sort ['f, 'a, 'b]), so it must be handled by special overload
+    -- If the field list after sort cannot be statically determined,
+    -- it will throw this error
     CoreSortObject ->
       throwTypecheckError $ CannotStaticallyDetermineRowOpSig "sort" info
+    -- (remove "f") : forall r1, r2, t. (({"f":t} ⊙ r2) ~ r1) => object {r1} -> object {r2}
     CoreRemove ->
       throwTypecheckError $ CannotStaticallyDetermineRowOpSig "remove" info
-    -- CoreIf -> "if"
+    -- if : forall a. bool -> a -> a -> a
     CoreIntToStr ->
       pure $ NonGeneric (TyInt :~> TyInt :~> TyString)
+    -- str-to-int : string -> integer
     CoreStrToInt ->
       pure $ NonGeneric (TyString :~> TyInt)
+    -- str-to-int-base : integer -> string -> integer
     CoreStrToIntBase ->
       pure $ NonGeneric (TyInt :~> TyString :~> TyInt)
+    -- fold : forall a b. (b -> a -> b) -> b -> [a] -> b
     CoreFold -> do
-      let aVar = TypeVariable 1 "a"
-          bVar = TypeVariable 0 "b"
+      let aVar = TypeVariable 0 "a"
+          bVar = TypeVariable 1 "b"
           a = TyVar aVar
           b = TyVar bVar
-      pure $ TypeScheme [aVar, bVar] [] ((a :~> b :~> a) :~> a :~> TyList b :~> a)
+      pure $ TypeScheme [bVar, aVar] [] ((b :~> a :~> b) :~> b :~> TyList a :~> b)
+    -- zip : forall a b c. (a -> b -> c) -> [a] -> [b] -> [c]
     CoreZip -> do
       let aVar = TypeVariable 2 "a"
           a = TyVar aVar
@@ -437,28 +503,39 @@ instance TypeOfBuiltin CoreBuiltin where
           cVar = TypeVariable 0 "c"
           c = TyVar cVar
       pure $ TypeScheme [aVar, bVar, cVar] [] ((a :~> b :~> c) :~> TyList a :~> TyList b :~> TyList c)
+    -- distinct : forall a. Ord a => [a] -> [a]
     CoreDistinct -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [Ord a] (TyList a :~> TyList a)
+    -- Note: the type here is a fallback type
+    -- The actual type of format when given a list literal is handled in `inferCoreBuiltinOverload`
+    -- format : string -> [string] -> string
     CoreFormat ->
       pure $ NonGeneric (TyString :~> TyList TyString :~> TyString)
+    -- enumerate : integer -> integer -> integer
     CoreEnumerate ->
       pure $ NonGeneric (TyInt :~> TyInt :~> TyList TyInt)
+    -- enumerate-step-n : integer -> integer -> [integer]
     CoreEnumerateStepN ->
       pure $ NonGeneric (TyInt :~> TyInt :~> TyList TyInt)
+    -- show : forall a. Show a => a -> String
     CoreShow -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      pure $ TypeScheme [aVar] [Show a] (a :~> TyString)
+      pure $ TypeScheme [aVar] [IsValue a] (a :~> TyString)
+    -- The type of read-msg is kind of... anything it wants to be, because
+    -- this is dependent on env dependent data.
+    -- it also means that it will also
+    -- read-msg : forall a. string -> a
     CoreReadMsg -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      pure $ TypeScheme [aVar] [] (TyString :~> a)
+      pure $ TypeScheme [aVar] [IsValue a] (TyString :~> a)
     CoreReadMsgDefault -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      pure $ TypeScheme [aVar] [] (TyNullary a)
+      pure $ TypeScheme [aVar] [IsValue a] (TyNullary a)
     CoreReadInteger ->
       pure $ NonGeneric (TyString :~> TyInt)
     CoreReadDecimal ->
@@ -867,10 +944,6 @@ _dbgTypedTerm = \case
     DictApp <$> _dbgTypedTerm term <*> traverse _dbgBuiltinTC a <*> pure i
   Format o o' i ->
     Format <$> _dbgTypedTerm o <*> traverse _dbgTypedTerm o' <*> pure i
-  -- ObjectLit obj i ->
-  --   ObjectLit <$> traverse _dbgTypedTerm obj <*> pure i
-  -- ObjectOp oop i ->
-  --   ObjectOp <$> traverse _dbgTypedTerm oop <*> pure i
 
 _dbgTypeScheme :: TypeScheme (TCTypeVar s) -> InferM s b i (TypeScheme Text)
 _dbgTypeScheme (TypeScheme tvs preds ty) = do
@@ -905,7 +978,6 @@ _dbgBuiltinTC = \case
   Fractional ty -> Fractional <$> _dbgType ty
   EnforceRead ty -> EnforceRead <$> _dbgType ty
   IsValue ty -> IsValue <$> _dbgType ty
-  EqRow rt -> EqRow <$> _dbgRowCtor rt
   RoseSubRow r1 r2 ->
     RoseSubRow <$> _dbgRoseRow r1 <*> _dbgRoseRow r2
   RoseRowEq r1 r2 ->
@@ -948,7 +1020,7 @@ _dbgMRef = \case
     Unbound u l _ -> pure $ MRefVar ("unbound" <> T.pack (show (u, l)))
     Bound u l -> pure $ MRefVar ("bound" <> T.pack (show (u, l)))
     LinkRef m -> pure (MConcrete m)
-    _ -> error "invariant broken"
+    _ -> error "invariant"
 
 
 _dbgVar :: TCTypeVar s -> InferM s b i (Type Text)
@@ -958,13 +1030,11 @@ _dbgVar tv = readTvRef tv >>= \case
   LinkTy ty -> _dbgType ty
   LinkRow ty -> _dbgType (TyObject ty)
   LinkRef _ -> error "invariant ref in row var posn"
-    -- LinkCap t -> _dbgType (TyCapToken t)
 
 _dbgVar' :: TCTypeVar s -> InferM s b i Text
 _dbgVar' tv = readTvRef tv >>= \case
   Unbound u l _ -> pure ("unbound" <> T.pack (show (u, l)))
-  Bound u l -> pure ("bound" <> T.pack (show (u, l)))
-  _ -> error "invariant broken"
+  _ -> error "invariant"
 
 
 enterLevel :: InferM s b i ()
@@ -1033,7 +1103,6 @@ byInst (Located i p) = case p of
   ListLike ty -> listLikeInst ty
   Fractional ty -> fractionalInst ty
   EnforceRead ty -> enforceReadInst ty
-  EqRow l -> eqRowInst i l
   RoseSubRow l r -> roseSubRow i l r
   IsValue v -> isValueInst v
   RoseRowEq l r -> roseRowEq i l r
@@ -1063,7 +1132,7 @@ eqInst i = \case
   TyModRef _ -> pure (Just [])
   TyList t -> pure (Just [Located i (Eq t)])
   TyCapToken -> pure (Just [])
-  TyObject r -> pure $ Just [Located i (EqRow r)]
+  TyObject _ -> pure $ Just []
   _ -> pure Nothing
 
 -- | Instances of Ord:
@@ -1125,14 +1194,14 @@ isValueInst = \case
   TyPrim _p -> pure (Just [])
   -- All lists are values by construction
   TyList t -> isValueInst t
-  -- Assume objects are values, simply because
-  -- construction will assume it so
-  -- TODO: this doesn't seem right, we're assuming this from
-  -- object construction, but this invariatn
+  -- Assume objects are values
   TyObject _ -> pure (Just [])
   TyCapToken -> pure (Just [])
   TyModRef{} -> pure (Just [])
-  _ -> pure Nothing
+  TyTable{} -> pure (Just [])
+  TyFun {} -> pure Nothing
+  TyNullary{} -> pure Nothing
+  -- _ -> pure Nothing
 
 
 -- | Instances of num:
@@ -1313,7 +1382,6 @@ isHnf (Located _ t) = case t of
   Fractional ty -> tyHnf ty
   EnforceRead ty -> tyHnf ty
   IsValue ty -> tyHnf ty
-  EqRow ty -> rowTyHnf ty
   RoseSubRow l r -> (&&) <$> roseRowHnf l <*> roseRowHnf r
   RoseRowEq l r -> rowEqHNF l r
   where
@@ -1346,7 +1414,7 @@ tyHnf = \case
   rowCtorHnf = \case
     RowVar v -> readTvRef v >>= \case
       LinkRow r -> rowCtorHnf r
-      Bound{} -> pure True
+      -- Bound{} -> pure True
       _ -> pure False
     RowConcrete rows ->
       and <$> traverse tyHnf rows
@@ -1407,7 +1475,6 @@ split ps i = do
     Fractional t -> hasUnbound t
     EnforceRead t -> hasUnbound t
     IsValue t -> hasUnbound t
-    EqRow t -> rowUnbound t
     RoseSubRow l r ->
       (&&) <$> roseUnbound l <*> roseUnbound r
     RoseRowEq l r ->
@@ -1517,7 +1584,6 @@ instantiateImported i (TypeScheme tvs preds ty) = do
     Fractional t -> Fractional <$> inst rl t
     EnforceRead t -> EnforceRead <$> inst rl t
     IsValue t -> IsValue <$> inst rl t
-    EqRow rty -> EqRow <$> instRow rl rty
     RoseSubRow l r ->
       RoseSubRow <$> instRoseSubrow rl l <*> instRoseSubrow rl r
     RoseRowEq l r ->
@@ -1592,10 +1658,10 @@ occursRow locTv@(Located tvi tv) (Located tci tct) = go tct
   where
   go = \case
     RowVar tv' | tv == tv' -> do
-      tl <- _dbgType (TyVar tv)
+      tl <- _dbgRowCtor (RowVar tv)
       -- Todo: TyObject is not the correct type here for the occurs check
-      tr <- _dbgType (TyObject tct)
-      throwTypecheckError $ InfiniteType (Located tvi tl) (Located tci tr)
+      tr <- _dbgRowCtor tct
+      throwTypecheckError $ InfiniteRow (Located tvi tl) (Located tci tr)
     RowVar tv' -> bindRef tv'
     RowConcrete t -> traverse_ (\r -> occurs locTv (Located tci r)) t
   bindRef tv' = readTvRef tv' >>= \case
@@ -1645,8 +1711,6 @@ unifyRowVar loc@(Located i tv) locRow@(Located _ row) = do
   ensureWellKinded i tv RowKind
   readTvRef tv >>= \case
     Unbound{} -> do
-      -- todo: occurs check for rows row
-      -- occurs tv t1 i
       occursRow loc locRow
       writeTvRef tv (LinkRow row)
     LinkRow linkedRow -> do
@@ -1880,7 +1944,7 @@ checkTermType checkty = \case
           let newVar = Var irn i
           pure (Located i ty, newVar, [])
           where
-          findSig [] = throwTypecheckError (ModuleReferenceDoesNotHaveMatchingFunction irn i)
+          findSig [] = throwTypecheckError $ CannotDetermineDynamicInvoke irn fnToCall i
           findSig (m:ms) = uses tcInterfaceDefns (M.lookup (QualifiedName fnToCall m)) >>= \case
             Just fn -> pure fn
             Nothing -> findSig ms
@@ -1977,7 +2041,8 @@ checkTermType checkty = \case
           -- Note: The `isValue` constraint here means that the type is most certainly
           -- not a partial application
           pure (Located i TyGuard, CCreateUserGuard c', (IsValue <$> t) : pe1)
-        _ -> throwTypecheckError $ InvariantOther "create-user-guard must take a singular app form" i
+        _ -> do
+          throwTypecheckError $ UserGuardMustBeApp (renderCompactText c) i
   IR.Builtin b i -> do
     tyImported <- typeOfBuiltin i b
     (ty, tvs, preds) <- instantiateImported i tyImported
@@ -2007,9 +2072,10 @@ checkTermType checkty = \case
     let objTyMap = views _1 _locElem <$> M.fromList m
         objTerms = over _2 (view _2) <$> m
         objTy = TyObject (RowConcrete objTyMap)
+        isValuePreds = [ IsValue <$> ty | (_, (ty, _, _)) <- m]
         preds = concat (view (_2._3) <$> m)
     unify (Located i objTy) checkty
-    pure (Located i objTy, ObjectLit objTerms i, preds)
+    pure (Located i objTy, ObjectLit objTerms i, isValuePreds ++ preds)
   IR.InlineValue _ _ -> error "todo: better error"
 
 
@@ -2046,7 +2112,7 @@ inferTerm = \case
           let newVar = Var irn i
           pure (Located i (liftType (_locElem ty)), newVar, [])
           where
-          findSig [] = throwTypecheckError (ModuleReferenceDoesNotHaveMatchingFunction irn i)
+          findSig [] = throwTypecheckError $ CannotDetermineDynamicInvoke irn fnToCall i
           findSig (m:ms) = uses tcInterfaceDefns (M.lookup (QualifiedName fnToCall m)) >>= \case
             Just fn -> pure fn
             Nothing -> findSig ms
@@ -2117,7 +2183,7 @@ inferTerm = \case
         IR.App{} -> do
           (t, c', pe1) <- inferTerm c
           pure (Located i TyGuard, CCreateUserGuard c', (IsValue <$> t) : pe1)
-        _ -> throwTypecheckError $ InvariantOther "create-user-guard must take a singular app form" i
+        _ -> throwTypecheckError $ UserGuardMustBeApp (renderCompactText c) i
   IR.Builtin b i -> do
     tyImported <- typeOfBuiltin i b
     (ty, tvs, preds) <- instantiateImported i tyImported
@@ -2141,8 +2207,9 @@ inferTerm = \case
     let objTyMap = views _1 _locElem <$> M.fromList m
         objTerms = over _2 (view _2) <$> m
         objTy = TyObject (RowConcrete objTyMap)
+        isValuePreds = [ IsValue <$> ty | (_, (ty, _, _)) <- m]
         preds = concat (view (_2._3) <$> m)
-    pure (Located i objTy, ObjectLit objTerms i, preds)
+    pure (Located i objTy, ObjectLit objTerms i, isValuePreds ++ preds)
   IR.InlineValue{} -> error "InlineValue not supported"
 
 inferApply
@@ -2459,6 +2526,7 @@ inferDefCap
 inferDefCap mn mh (IR.DefCap spec args term meta info) = do
   let name = _argName spec
   enterLevel
+
   retArg <- argToTypedArg spec
   args' <- traverse argToTypedArg args
   let rty = _targType retArg
@@ -2467,8 +2535,9 @@ inferDefCap mn mh (IR.DefCap spec args term meta info) = do
         _ -> foldr TyFun rty (_targType <$> args')
   let m = RAList.fromList (reverse (typedArgToTypeScheme <$> args'))
   (termTy, term', preds) <- locally tcVarEnv (m RAList.++) $ inferTerm term
-  leaveLevel
   unify (Located (_targInfo retArg) rty) termTy
+
+  leaveLevel
   -- Note: This can have some kind of gnarly consequences if for whatever reason there is a constraint that
   -- the return type requires.
   --
@@ -2531,7 +2600,7 @@ inferInterface (IR.Interface ifn defns imps ifh iftxh _ifcode ifinfo) = do
 enforceArgType :: Arg IR.Type i -> InferM s b i (TypedArg (Type Void) i)
 enforceArgType (Arg n ty i) = case ty of
   Just ty' -> TypedArg n <$> liftCoreType i ty' <*> pure i
-  Nothing -> throwTypecheckError $ ArgumentRequiresTypeAnnotation i
+  Nothing -> throwTypecheckError $ ArgumentRequiresTypeAnnotation n i
 
 inferIfDefun :: ModuleName -> IR.IfDefun IR.Type info -> InferM s b info (IfDefun info)
 inferIfDefun mn (IR.IfDefun spec args info) = do
@@ -2765,7 +2834,6 @@ debruijnizeBuiltinTC i env = \case
   Fractional ty -> Fractional <$> debruijnizeType i env ty
   EnforceRead ty -> EnforceRead <$> debruijnizeType i env ty
   IsValue ty -> IsValue <$> debruijnizeType i env ty
-  EqRow rt -> EqRow <$> debruijnizeRowCtor i env rt
   RoseSubRow r1 r2 ->
     RoseSubRow <$> debruijnizeRoseRow i env r1 <*> debruijnizeRoseRow i env r2
   RoseRowEq r1 r2 ->
@@ -2911,16 +2979,16 @@ renderTypecheckError = \case
     invariantErr i $ "Unbound free variable:" <+> pretty fqn
   InvariantDefconstNotEvaluated fqn i ->
     invariantErr i $ "Defconst not evaluated" <+> pretty fqn
-  InvariantOther t i ->
-    invariantErr i $ pretty t
+  UserGuardMustBeApp t i ->
+    singleLocError i $ "create-user-guard should take only an application in the form (f a b .. z), received" <+> pretty t
   ModuleLacksImplementedInterfaces mn mns i ->
     singleLocError i $ "Module" <+> pretty mn <+> "does not implement the requested interfaces: " <+> commaSep (S.toList mns)
   ExpectedKind expected actual i -> do
     singleLocError i $ "Expected kind" <+> pretty expected <+> "but got" <+> pretty actual
   InfiniteType (Located li lty) (Located _ rty) -> do
     singleLocError li $ "Cannot construct the infinite type" <+> pretty lty <+> "~" <+> pretty rty
-  InfiniteRow l r i ->
-    singleLocError i $ "Cannot construct the infinite type" <+> pretty l <+> "~" <+> pretty r
+  InfiniteRow (Located li lrow) (Located _ rrow) ->
+    singleLocError li $ "Cannot construct the infinite type" <+> pretty lrow <+> "~" <+> pretty rrow
   DisallowedGenericSignature ty i ->
     singleLocError i $ "Generic type" <+> pretty ty <+> "is not allowed in this position"
   CannotUnifyWithBoundVariable t i ->
@@ -2928,11 +2996,35 @@ renderTypecheckError = \case
   CannotResolveConstraints pts i -> do
     constrRender <- forM pts $ \(Located i' constr) -> do
       predSlice <- mkReplErrorLocSlice i'
-      pure $ "Cannot resolve" <+> pretty constr <> hardline <> pretty predSlice
+      pure $ constrErrorMsg constr <> hardline <> pretty predSlice
     overallSlice <- mkReplErrorLocSlice i
     pure $ renderCompactText' $ vsep constrRender <> "at" <> hardline <> pretty overallSlice
-  _ -> undefined
+  CannotStaticallyDetermineRowOpSig sig i -> do
+    singleLocError i $
+      "Cannot statically determine the type of the following operation:" <+> pretty sig <> ". Calculated field labels are not supported in types"
+  ArgumentRequiresTypeAnnotation arg i ->
+    singleLocError i $ "Argument" <+> pretty arg <+> "requires type annotation"
+  InvalidDefcapManagerFun (Located li lty) (Located ri rty) -> do
+    lslice <- mkReplErrorLocSlice li
+    rslice <- mkReplErrorLocSlice ri
+    pure $ renderCompactText' $
+      "Couldnt match type" <+> pretty lty <+> "with" <+> pretty rty <> "as a defcap manager defun" <> hardline
+      <> "Expected:" <+> pretty lty <> hardline <> pretty lslice <> hardline
+      <> "Actual:" <+> pretty rty <> hardline <> pretty rslice
+  CannotDetermineDynamicInvoke n t i ->
+    singleLocError i $
+    "Cannot statically determine the type of the call" <+> pretty (_nName n) <> "::" <> pretty t <> "."
+    <+> "None of" <+> pretty (_nName n) <> "'s interfaces implements function" <> pretty t
+  TypecheckingDoesNotSupportType t i ->
+    singleLocError i $ "Static typechecking unsupported for type:" <+> pretty t
+    <> ". If you are using the type list or object, consider moving to typed lists (e.g [integer])"
+    <+> "or to typed objects (e.g for some (defschema my-schema balance:integer), object{my-schema})"
+  DefPactStepIndexOutOfBounds fqn idx i ->
+    singleLocError i $
+      pretty fqn <+> "does not have a step" <+> pretty idx <> ", so we cannot infer the type if invoked at that step"
   where
+  constrErrorMsg (IsValue t) = "Type" <+> pretty t <+> "is a partially applied function or lambda closure, but expected a value. Maybe a function application is missing arguments?"
+  constrErrorMsg constr =  "Cannot resolve" <+> pretty constr
   invariantErr i msg =
     let msg' = "Typechecker invariant error! Please report this to the Pact team @kadena:" <+> msg
     in singleLocError i msg'
