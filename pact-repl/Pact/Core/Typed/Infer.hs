@@ -234,8 +234,10 @@ data TypecheckError i
   --   we cannot infer a type for if it is not declared
   | InvalidDefcapManagerFun (Located i (Type Void)) (Located i (Type Void))
   -- ^ Defcap manager function does not match the expected type
-  | CannotDetermineDynamicInvoke Name Text i
+  | CannotDetermineDynamicInvoke Name (S.Set ModuleName) Text i
   -- ^ We cannot determine the type of a dynamic invoke `m::f` statically
+  | CannotInferTypeAsModRef (Located i (Type Text))
+  -- ^ We cannot
   | TypecheckingDoesNotSupportType IR.Type i
   -- ^ A particular type is unsupported, such as `list` or `object` (Without schema)
   | DefPactStepIndexOutOfBounds FullyQualifiedName Int i
@@ -532,37 +534,63 @@ instance TypeOfBuiltin CoreBuiltin where
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [IsValue a] (TyString :~> a)
+    -- Note: this will fail at runtime, it comes from the env data so we can't
+    -- do much about its typing.
+    -- read-msg : forall a. string -> a
     CoreReadMsgDefault -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [IsValue a] (TyNullary a)
+    -- read-integer : string -> integer
     CoreReadInteger ->
       pure $ NonGeneric (TyString :~> TyInt)
+    -- read-decimal : string -> decimal
     CoreReadDecimal ->
       pure $ NonGeneric (TyString :~> TyDecimal)
+    -- read-string : string -> string
     CoreReadString ->
       pure $ NonGeneric (TyString :~> TyString)
+    -- read-keyset : string -> guard
     CoreReadKeyset ->
       pure $ NonGeneric (TyString :~> TyGuard)
+    -- Note: EnforceRead as a typeclass exists because enforce-guard and enforce-keyset
+    -- also can take a string argument, which effectively interprets
+    -- (enforce-guard "foo") == (enforce-guard (keyset-ref-guard "foo"))
+    --
+    -- enforce-guard : forall a. EnforceRead a => a -> bool
     CoreEnforceGuard -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [EnforceRead a] (a :~> TyBool)
+    -- enforce-keyset : forall a. EnforceRead a => a -> bool
     CoreEnforceKeyset -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [EnforceRead a] (a :~> TyBool)
+    -- keyset-ref-guard : string -> guard
     CoreKeysetRefGuard ->
       pure $ NonGeneric (TyString :~> TyGuard)
+    -- create-capability-guard : cap-token -> guard
     CoreCreateCapabilityGuard ->
       pure $ TypeScheme [] [] (TyCapToken :~> TyGuard)
+    -- create-capability-pact-guard : cap-token -> guard
     CoreCreateCapabilityPactGuard ->
       pure $ TypeScheme [] [] (TyCapToken :~> TyGuard)
+    -- Note: this native is deprecated
+    -- create-module-guard : string -> guard
     CoreCreateModuleGuard ->
       pure $ NonGeneric (TyString :~> TyGuard)
+    -- Note: this native is deprecated
+    -- create-pact-guard : string -> guard
     CoreCreateDefPactGuard ->
       pure $ NonGeneric (TyString :~> TyGuard)
-    -- todo: object access within `At`
+
+    -- at : forall a. integer -> [a] -> a
+    -- at k throws an error if it is out of bounds
+    --
+    -- However, if `(at "f")` is used, where "f" is a string literal
+    -- then its type changes into
+    -- (at "f") : forall (r: row, a:type). ({"f":a} <= r) => object{r} -> a
     CoreAt -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
@@ -1034,6 +1062,7 @@ _dbgVar tv = readTvRef tv >>= \case
 _dbgVar' :: TCTypeVar s -> InferM s b i Text
 _dbgVar' tv = readTvRef tv >>= \case
   Unbound u l _ -> pure ("unbound" <> T.pack (show (u, l)))
+  Bound u l -> pure ("bound" <> T.pack (show (u, l)))
   _ -> error "invariant"
 
 
@@ -1944,12 +1973,13 @@ checkTermType checkty = \case
           let newVar = Var irn i
           pure (Located i ty, newVar, [])
           where
-          findSig [] = throwTypecheckError $ CannotDetermineDynamicInvoke irn fnToCall i
+          findSig [] = throwTypecheckError $ CannotDetermineDynamicInvoke irn mrefs fnToCall i
           findSig (m:ms) = uses tcInterfaceDefns (M.lookup (QualifiedName fnToCall m)) >>= \case
             Just fn -> pure fn
             Nothing -> findSig ms
-        Just _ty ->
-          throwTypecheckError $ CannotDetermineDynamicInvoke irn fnToCall i
+        Just _ty -> do
+          _ty' <- _dbgType _ty
+          throwTypecheckError $ CannotInferTypeAsModRef (Located i _ty')
         Nothing ->
           throwTypecheckError $ InvariantUnboundTermVariable n i
       where
@@ -2112,12 +2142,13 @@ inferTerm = \case
           let newVar = Var irn i
           pure (Located i (liftType (_locElem ty)), newVar, [])
           where
-          findSig [] = throwTypecheckError $ CannotDetermineDynamicInvoke irn fnToCall i
+          findSig [] = throwTypecheckError $ CannotDetermineDynamicInvoke irn mrefs fnToCall i
           findSig (m:ms) = uses tcInterfaceDefns (M.lookup (QualifiedName fnToCall m)) >>= \case
             Just fn -> pure fn
             Nothing -> findSig ms
         Just _ty -> do
-          throwTypecheckError $ CannotDetermineDynamicInvoke irn fnToCall i
+          _ty' <- _dbgType _ty
+          throwTypecheckError $ CannotInferTypeAsModRef (Located i _ty')
         Nothing ->
           throwTypecheckError $ InvariantUnboundTermVariable n i
       where
@@ -3011,10 +3042,10 @@ renderTypecheckError = \case
       "Couldnt match type" <+> pretty lty <+> "with" <+> pretty rty <> "as a defcap manager defun" <> hardline
       <> "Expected:" <+> pretty lty <> hardline <> pretty lslice <> hardline
       <> "Actual:" <+> pretty rty <> hardline <> pretty rslice
-  CannotDetermineDynamicInvoke n t i ->
+  CannotDetermineDynamicInvoke n mrefs t i ->
     singleLocError i $
     "Cannot statically determine the type of the call" <+> pretty (_nName n) <> "::" <> pretty t <> "."
-    <+> "None of" <+> pretty (_nName n) <> "'s interfaces implements function" <> pretty t
+    <+> "None of the following interfaces implements function" <+> pretty t <> ":" <+> commaSep (S.toList mrefs)
   TypecheckingDoesNotSupportType t i ->
     singleLocError i $ "Static typechecking unsupported for type:" <+> pretty t
     <> ". If you are using the type list or object, consider moving to typed lists (e.g [integer])"
@@ -3022,6 +3053,8 @@ renderTypecheckError = \case
   DefPactStepIndexOutOfBounds fqn idx i ->
     singleLocError i $
       pretty fqn <+> "does not have a step" <+> pretty idx <> ", so we cannot infer the type if invoked at that step"
+  CannotInferTypeAsModRef (Located i t) ->
+    singleLocError i $ "Expression of type" <+> pretty t <+> "cannot be used in a dynamic call. Make sure your dynamic call is using a module reference"
   where
   constrErrorMsg (IsValue t) = "Type" <+> pretty t <+> "is a partially applied function or lambda closure, but expected a value. Maybe a function application is missing arguments?"
   constrErrorMsg constr =  "Cannot resolve" <+> pretty constr

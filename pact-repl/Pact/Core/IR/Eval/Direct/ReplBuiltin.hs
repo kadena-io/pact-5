@@ -585,7 +585,7 @@ typecheck info b _env = \case
     Just mn -> Typed.typecheckModule info mn >>= \case
       Left tcErr -> do
         pp <- Typed.renderTypecheckError tcErr
-        throwExecutionError info (EvalError pp)
+        throwExecutionError info (TypecheckingFailure mn pp)
       Right _defs -> do
         liftIO $ putStrLn $ T.unpack $ T.unlines (renderCompactText <$> (Typed._mDefs _defs))
         return (VString "typecheck success!")
