@@ -40,6 +40,7 @@ module Pact.Core.IR.Eval.Direct.Evaluator
  , enforceNotWithinDefcap
  , isKeysetInSigs
  , isKeysetNameInSigs
+ , withMagicCap
  ) where
 
 import Control.Lens hiding (op, from, to, parts)
@@ -975,6 +976,20 @@ isKeysetNameInSigs info env ksn = do
 -- Capabilities
 ------------------------------------------------------
 
+withMagicCap :: i -> MagicCap -> EvalM e b i a -> EvalM e b i a
+withMagicCap info mcap act = do
+  pact52ForkNotEnabled <- isExecutionFlagSet FlagDisablePact52
+  if pact52ForkNotEnabled then act
+  else do
+    let ct = PString <$> mkMagicCapToken mcap
+    acquired <- isCapInStack ct
+    when acquired $ throwExecutionError info $ EvalError $ "magic cap already acquired: " <> renderMagicCap mcap
+    oldCapSlots <- use (esCaps . csSlots)
+    (esCaps . csSlots) %= (CapSlot ct []:)
+    v <- act
+    (esCaps . csSlots) .= oldCapSlots
+    pure v
+
 requireCap
   :: i
   -> FQCapToken
@@ -984,20 +999,6 @@ requireCap info (CapToken fqn args) = do
   capInStack <- isCapInStack qualCapToken
   if capInStack then return (VBool True)
   else throwUserRecoverableError info (CapabilityNotGranted qualCapToken)
-
-isCapInStack
-  :: CapToken QualifiedName PactValue
-  -> EvalM e b i Bool
-isCapInStack ct = do
-  capSet <- getAllStackCaps
-  pure $ S.member ct capSet
-
-
-isCapInStack'
-  :: CapToken FullyQualifiedName PactValue
-  -> EvalM e b i Bool
-isCapInStack' (CapToken fqn args) =
-  isCapInStack (CapToken (fqnToQualName fqn) args)
 
 composeCap
   :: (IsBuiltin b)

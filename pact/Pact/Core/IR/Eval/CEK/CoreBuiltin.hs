@@ -1156,7 +1156,8 @@ defineKeySet' info cont handler env ksname newKs  = do
       liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
         Just oldKs -> do
           let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
-          isKeysetInSigs info cont' handler env oldKs
+          magicKeysetDefineCont <- withMagicCap info (DefineKeysetCap ksname) cont'
+          isKeysetInSigs info magicKeysetDefineCont handler env oldKs
         Nothing | ignoreNamespaces -> writeKs
         Nothing | otherwise -> use (esLoaded . loNamespace) >>= \case
           Nothing ->
@@ -1164,7 +1165,8 @@ defineKeySet' info cont handler env ksname newKs  = do
           Just (Namespace ns uGuard _adminGuard) -> do
             when (Just ns /= _keysetNs ksn) $ throwExecutionError info (MismatchingKeysetNamespace ns)
             let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
-            enforceGuard info cont' handler env uGuard
+            magicKeysetNsCont <- withMagicCap info (NamespaceOwnerCap (_namespaceName ns)) cont'
+            enforceGuard info magicKeysetNsCont handler env uGuard
 
 defineKeySet :: (IsBuiltin b) => NativeFunction e b i
 defineKeySet info b cont handler env = \case
@@ -1707,7 +1709,8 @@ coreDefineNamespace info b cont handler env = \case
         size <- sizeOf info SizeOfV0 existing
         chargeGasArgs info $ GRead size
         let cont' = BuiltinC env info (DefineNamespaceC ns) cont
-        enforceGuard info cont' handler env laoG
+        magicCapCont <- withMagicCap info (DefineNamespaceCap n) cont'
+        enforceGuard info magicCapCont handler env laoG
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
         SimpleNamespacePolicy -> do
           nsSize <- sizeOf info SizeOfV0 ns

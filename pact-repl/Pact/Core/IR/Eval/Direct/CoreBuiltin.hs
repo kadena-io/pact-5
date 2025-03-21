@@ -1154,14 +1154,14 @@ defineKeySet' info env ksname newKs  = do
             return (VString "Keyset write success")
       liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
         Just oldKs -> do
-          _ <- isKeysetInSigs info env oldKs
+          _ <- withMagicCap info (DefineKeysetCap ksname) $ isKeysetInSigs info env oldKs
           writeKs
         Nothing | ignoreNamespaces -> writeKs
         Nothing | otherwise -> use (esLoaded . loNamespace) >>= \case
           Nothing -> throwExecutionError info CannotDefineKeysetOutsideNamespace
           Just (Namespace ns uGuard _adminGuard) -> do
             when (Just ns /= _keysetNs ksn) $ throwExecutionError info (MismatchingKeysetNamespace ns)
-            _ <- enforceGuard info env uGuard
+            _ <- withMagicCap info (NamespaceOwnerCap (_namespaceName ns)) $ enforceGuard info env uGuard
             writeKs
 
 defineKeySet :: (IsBuiltin b) => NativeFunction e b i
@@ -1697,7 +1697,7 @@ coreDefineNamespace info b env = \case
       Just existing@(Namespace _ _ laoG) -> do
         size <- sizeOf info SizeOfV0 existing
         chargeGasArgs info $ GRead size
-        allow <- enforceGuard info env laoG
+        allow <- withMagicCap info (DefineNamespaceCap n) $ enforceGuard info env laoG
         writeNs allow nsn ns
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
         SimpleNamespacePolicy -> do

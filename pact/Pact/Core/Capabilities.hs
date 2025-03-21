@@ -21,6 +21,9 @@ module Pact.Core.Capabilities
  , PactEvent(..)
  , dcMetaFqName
  , getManagedParam
+ , MagicCap(..)
+ , renderMagicCap
+ , mkMagicCapToken
  ) where
 
 import Control.Lens
@@ -151,3 +154,27 @@ instance (NFData name, NFData v) => NFData (CapSlot name v)
 instance (NFData name, NFData v) => NFData (CapToken name v)
 instance (NFData name) => NFData (DefManagedMeta name)
 instance (NFData name) => NFData (DefCapMeta name)
+
+data MagicCap
+  = DefineKeysetCap Text
+  | ModuleKeysetCap Text
+  | DefineNamespaceCap Text
+  | NamespaceOwnerCap Text
+  deriving (Eq, Show, Ord)
+
+magicCapParam :: MagicCap -> Text
+magicCapParam = \case
+  DefineKeysetCap t -> t
+  ModuleKeysetCap t -> t
+  DefineNamespaceCap t -> t
+  NamespaceOwnerCap t -> t
+
+renderMagicCap :: MagicCap -> Text
+renderMagicCap = \case
+  DefineKeysetCap{} -> "DEFINE_KEYSET"
+  ModuleKeysetCap{} -> "MODULE_KEYSET"
+  DefineNamespaceCap{} -> "DEFINE_NAMESPACE"
+  NamespaceOwnerCap{} -> "NAMESPACE"
+
+mkMagicCapToken :: MagicCap -> CapToken QualifiedName Text
+mkMagicCapToken m = CapToken (QualifiedName (renderMagicCap m) pactMagicReservedModuleName) [magicCapParam m]

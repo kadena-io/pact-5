@@ -1,8 +1,6 @@
 {-# LANGUAGE CPP #-}
 
-#if MIN_VERSION_base(4,20,0)
 {-# OPTIONS_GHC -Wno-x-partial #-}
-#endif
 
 -- |
 -- Module: Data.List.Unsafe

@@ -74,6 +74,7 @@ module Pact.Core.Names
  , HashedModuleName(..)
  , renderHashedModuleName
  , parseHashedModuleName
+ , pactMagicReservedModuleName
  ) where
 
 import Control.Lens
@@ -590,3 +591,6 @@ jsonSafeRenderTableName (TableName tbl mn) = renderModuleName mn <> ":" <> tbl
 
 parseJsonSafeTableName :: Text -> Maybe TableName
 parseJsonSafeTableName = MP.parseMaybe (jsonSafeTableNameParser <* MP.eof)
+
+pactMagicReservedModuleName :: ModuleName
+pactMagicReservedModuleName = ModuleName "pact" Nothing

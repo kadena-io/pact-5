@@ -52,6 +52,7 @@ import Pact.Core.Serialise.CBOR_V1(SerialiseV1)
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
 import qualified Pact.Core.Syntax.ParseTree as Lisp
+import Pact.Core.IR.Eval.Runtime.Utils
 
 type HasCompileEnv b i
   = ( DesugarBuiltin b
@@ -88,6 +89,33 @@ instance Pretty (CompileValue i) where
     LoadedImports i ->
       "Loaded imports from" <+> pretty (_impModuleName i)
 
+-- | Push a "magic" cap into scope for a single `Eval` action.
+--
+--   Note: this has its own definition here, because the definition for a particular interpreter
+--   may differ. For example, given that the CEK machine is almost purely recursive calls,
+--   this definition would put it in scope of an action for the remainder of the entire transaction.
+--
+--   Here, it's only in scope of the guard enforce. This definition is not to be exported
+--   and reused anywhere in the interpretation pipeline unless you really know what you're doing,
+--   and even then, it's preferable to copy paste it rather than export it.
+--
+--   This is pact *magic*. This bypasses the regular capability mechanisms, so we have to be very careful
+--   when allowing this sort of cap injection
+withMagicCap :: i -> MagicCap -> EvalM e b i a -> EvalM e b i a
+withMagicCap info mcap act = do
+  pact52ForkNotEnabled <- isExecutionFlagSet FlagDisablePact52
+  if pact52ForkNotEnabled then act
+  else do
+    let ct = PString <$> mkMagicCapToken mcap
+    acquired <- isCapInStack ct
+    when acquired $ throwExecutionError info $ EvalError $ "magic cap already acquired: " <> renderMagicCap mcap
+    -- We use `oldCsSlots` here instead of `safeTail` in case
+    -- some gnarly stuff happens, so there is no chance of cap leakage
+    oldCsSlots <- use (esCaps . csSlots)
+    (esCaps . csSlots) %= (CapSlot ct []:)
+    v <- act
+    (esCaps . csSlots) .= oldCsSlots
+    pure v
 
 enforceNamespaceInstall
   :: i
@@ -95,8 +123,9 @@ enforceNamespaceInstall
   -> EvalM e b i ()
 enforceNamespaceInstall info interpreter =
   use (esLoaded . loNamespace) >>= \case
-    Just ns ->
-      void $ interpretGuard interpreter info (_nsUser ns)
+    Just ns -> do
+      let nsn = _namespaceName $ _nsName $ ns
+      void $ withMagicCap info (NamespaceOwnerCap nsn) $ interpretGuard interpreter info (_nsUser ns)
     Nothing ->
       enforceRootNamespacePolicy
     where
@@ -127,7 +156,7 @@ evalModuleGovernance interpreter tl = do
               let ksnTerm = Constant (LString (renderKeySetName ksn)) info
                   ksrg = App (Builtin (liftCoreBuiltin CoreKeysetRefGuard) info) (pure ksnTerm) info
                   term = App (Builtin (liftCoreBuiltin CoreEnforceGuard) info) (pure ksrg) info
-              void $ eval interpreter PImpure term
+              void $ withMagicCap info (ModuleKeysetCap (renderModuleName mname)) $ eval interpreter PImpure term
             CapGov (FQName fqn) -> do
               hasModAdmin <- uses (esCaps . csModuleAdmin) (S.member mname)
               -- check whether we already have module admin.
@@ -202,7 +231,7 @@ evalTopLevel interpreter (RawCode code) tlFinal deps = do
       -- enforce new module keyset on install
       case _mGovernance m of
         KeyGov ksn ->
-          () <$ interpretGuard interpreter (_mInfo m) (GKeySetRef ksn)
+          void $ withMagicCap (_mInfo m) (ModuleKeysetCap (renderModuleName (_mName m))) $ interpretGuard interpreter (_mInfo m) (GKeySetRef ksn)
       -- governance is granted on install without testing the cap.
       -- rationale is governance might be some vote or something
       -- that doesn't exist yet, or something like non-upgradable governance.
