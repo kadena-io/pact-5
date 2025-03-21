@@ -41,6 +41,7 @@ module Pact.Core.IR.Eval.CEK.Evaluator
   , module Pact.Core.IR.Eval.CEK.Utils
   , returnCEKError
   , evalWithinCap
+  , withMagicCap
   ) where
 
 
@@ -807,16 +808,16 @@ requireCap info cont handler (CapToken fqn args) = do
   if capInStack then returnCEKValue cont handler (VBool True)
   else returnCEKError info cont handler (CapabilityNotGranted qualCapToken)
 
-isCapInStack
-  :: CapToken QualifiedName PactValue
-  -> EvalM e b i Bool
-isCapInStack ct = S.member ct <$> getAllStackCaps
-
-isCapInStack'
-  :: CapToken FullyQualifiedName PactValue
-  -> EvalM e b i Bool
-isCapInStack' (CapToken fqn args) =
-  isCapInStack (CapToken (fqnToQualName fqn) args)
+withMagicCap :: i -> MagicCap -> Cont e b i -> EvalM e b i (Cont e b i)
+withMagicCap info mcap cont = do
+  pact52ForkNotEnabled <- isExecutionFlagSet FlagDisablePact52
+  if pact52ForkNotEnabled then pure cont
+  else do
+    let ct = PString <$> mkMagicCapToken mcap
+    acquired <- isCapInStack ct
+    when acquired $ throwExecutionError info $ EvalError $ "magic cap already acquired: " <> renderMagicCap mcap
+    (esCaps . csSlots) %= (CapSlot ct []:)
+    pure $ CapPopC PopCapInvoke info cont
 
 composeCap
   :: (IsBuiltin b)
@@ -1669,7 +1670,6 @@ evalResumePact info bEnv mdpe = do
         VPactValue pv -> pure pv
         _ ->
           throwExecutionError info (EvalError "Evaluation did not reduce to a value")
-
 
 -- Keyset Code
 isKeysetInSigs

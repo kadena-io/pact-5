@@ -61,6 +61,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , chargeUnconsWork
  , chargeTryNodeWork
  , lookupFqNameOrFail
+ , isCapInStack
+ , isCapInStack'
  ) where
 
 import Control.Lens hiding (from, to)
@@ -676,3 +678,14 @@ emitPactWarning i pw =
     Nothing -> pure ()
     Just warnRef ->
       liftIO $ modifyIORef' warnRef (pushWarning (Located i pw))
+
+isCapInStack
+  :: CapToken QualifiedName PactValue
+  -> EvalM e b i Bool
+isCapInStack ct = S.member ct <$> getAllStackCaps
+
+isCapInStack'
+  :: CapToken FullyQualifiedName PactValue
+  -> EvalM e b i Bool
+isCapInStack' (CapToken fqn args) =
+  isCapInStack (CapToken (fqnToQualName fqn) args)

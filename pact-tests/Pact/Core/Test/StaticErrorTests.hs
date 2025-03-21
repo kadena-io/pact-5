@@ -1253,6 +1253,129 @@ executionTests =
         )
         )
     |])
+  , ("bad-gov-cap-acquire", isUserRecoverableError _KeysetPredicateFailure, [text|
+    ;; ======== test governance cap acquire ========
+
+    (begin-tx)
+    (env-data { 'k: ['ns], 'gov: ['gov] })
+    (define-namespace 'ns (read-keyset 'k) (read-keyset 'k))
+    (namespace 'ns)
+    (env-keys ['ns])
+    (module govcap-acquire GOV
+      (defcap GOV ()
+        (enforce-guard (read-keyset 'gov)))
+      (defcap OTHER () true))
+    (commit-tx)
+
+    (begin-tx)
+    (env-sigs
+    [ { 'key: 'gov
+      , 'caps: [ (ns.govcap-acquire.OTHER) ] } ])
+    (namespace 'ns)
+    ;; failure because wrong cap scoped
+    (module govcap-acquire GOV
+      (defcap GOV () true))
+    (rollback-tx)
+    |])
+  , ("bad-magic-module-keyset-install", isUserRecoverableError _KeysetPredicateFailure, [text|
+    (begin-tx "setup magic")
+    ;; repl tests need pseudomodule for 'env-sigs'
+    (module pact GOV
+      (defcap GOV () true)
+      (defcap NAMESPACE (name:string)
+        (enforce false "Never called"))
+      (defcap MODULE_KEYSET (name:string)
+        (enforce false "Never called"))
+    )
+    (env-data { 'k: [ 'magic ] })
+    (define-namespace 'ns (read-keyset 'k) (read-keyset 'k))
+    (env-keys ['magic])
+    (namespace 'ns)
+    (define-keyset "ns.magic" (read-keyset 'k))
+    (commit-tx)
+
+    (begin-tx)
+    (namespace 'ns)
+    (env-sigs
+    [ { 'key: 'magic
+      , 'caps: [ (pact.MODULE_KEYSET "other")
+                , (pact.NAMESPACE "ns") ]
+      } ] )
+    ;; keyset enforced on install
+    (module magic-module "ns.magic"
+      (defun f () 1))
+    |])
+  , ("bad-magic-module-keyset-upgrade", isUserRecoverableError _KeysetPredicateFailure, [text|
+  (begin-tx "setup magic")
+  ;; repl tests need pseudomodule for 'env-sigs'
+  (module pact GOV
+    (defcap GOV () true)
+    (defcap MODULE_KEYSET (name:string)
+      (enforce false "Never called"))
+  )
+  (env-data { 'k: [ 'magic ] })
+  (define-namespace 'ns (read-keyset 'k) (read-keyset 'k))
+  (env-keys ['magic])
+  (namespace 'ns)
+  (define-keyset "ns.magic" (read-keyset 'k))
+  (env-keys ['magic])
+  (module magic-module "ns.magic"
+    (defun f () 1))
+  (commit-tx)
+
+  (begin-tx)
+  (namespace 'ns)
+  (env-sigs
+  [ { 'key: 'magic
+    , 'caps: [(pact.MODULE_KEYSET "other")]
+    } ] )
+  (module magic-module GOV
+    (defcap GOV () true))
+    |])
+  , ("bad-ns-entry-iface.repl", isUserRecoverableError _KeysetPredicateFailure, [text|
+    (begin-tx "setup magic")
+    ;; repl tests need pseudomodule for 'env-sigs'
+    (module pact GOV
+      (defcap GOV () true)
+      (defcap NAMESPACE (name:string)
+        (enforce false "Never called"))
+    )
+    (env-data { 'k: ['magic] })
+    (env-keys ['magic])
+    (define-namespace 'magic (read-keyset 'k) (read-keyset 'k))
+    (commit-tx)
+
+    (begin-tx)
+    (namespace 'magic)
+    (env-sigs
+    [ { 'key: 'magic
+      , 'caps: [(pact.NAMESPACE 'other)]
+      } ] )
+    (interface boom
+      (defun f ()))
+    |])
+  , ("bad-ns-entry-module", isUserRecoverableError _KeysetPredicateFailure, [text|
+    (begin-tx "setup magic")
+    ;; repl tests need pseudomodule for 'env-sigs'
+    (module pact GOV
+      (defcap GOV () true)
+      (defcap NAMESPACE (name:string)
+        (enforce false "Never called"))
+    )
+    (env-data { 'k: ['magic] })
+    (env-keys ['magic])
+    (define-namespace 'magic (read-keyset 'k) (read-keyset 'k))
+    (commit-tx)
+
+    (begin-tx)
+    (namespace 'magic)
+    (env-sigs
+    [ { 'key: 'magic
+      , 'caps: [(pact.NAMESPACE 'other)]
+      } ] )
+    (module boom GOV
+      (defcap GOV () true))
+    |])
   ]
 
 builtinTests :: [(String, PactError FileLocSpanInfo -> Bool, Text)]
