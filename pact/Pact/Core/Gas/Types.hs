@@ -14,6 +14,7 @@ module Pact.Core.Gas.Types
   ( MilliGas(..)
   , MilliGasLimit(..)
   , Gas(..)
+  , _Gas
   , GasLimit(..)
   , _GasLimit
   , GasPrice(..)
@@ -104,6 +105,8 @@ newtype Gas
   deriving (Semigroup, Monoid) via (Sum SatWord)
   deriving (Enum) via SatWord
   deriving newtype NFData
+
+makePrisms ''Gas
 
 instance Pretty Gas where
   pretty (Gas g) = pretty g
