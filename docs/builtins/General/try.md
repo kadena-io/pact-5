@@ -4,11 +4,12 @@ Use the `try` function to attempt a **pure** action, returning a default value i
 Pure functions and pure expressions perform operations that produce a resulting value with no side effects. 
 
 Pure functions always return identical results for identical arguments.
-Pure expressions don't allow mutable variables reference arguments, or input and output operations.
+Pure expressions don't allow mutable variables, reference arguments, or input and output operations.
 
 Unlike impure expressions that support reading and writing to tables and working with non-deterministic state, pure expressions:
 
-- Don't write to memory or perform input or output operations.
+- Don't write to memory.
+- Don't perform input or output operations.
 - Don't work with non-deterministic state. 
 
 ### Basic syntax
@@ -16,7 +17,7 @@ Unlike impure expressions that support reading and writing to tables and working
 To attempt a pure action and return a default value if the action fails, use the following syntax:
 
 ```pact
-(try default ACactionTION)
+(try default action)
 ```
 
 ### Arguments
@@ -44,8 +45,8 @@ pact> (try 3 (enforce (= 1 2) "this will definitely fail"))
 3
 ```
 
-If the `enforce` function specifies a condition that succeeds, the try function returns the result.
-In this case, the result is `true`:
+If the `enforce` function specifies a condition that succeeds, the `try` function returns the result.
+For example, if the condition succeeds, the result is `true`:
 
 ```pact
 (try 3 (enforce (= 1 1) "this will definitely fail"))
