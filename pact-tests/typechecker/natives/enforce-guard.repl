@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-enforce-guard ()
+    (enforce-guard (read-keyset "foo"))
+    (enforce-guard "foo")
+  )
+  )

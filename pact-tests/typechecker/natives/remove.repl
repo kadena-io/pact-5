@@ -1,0 +1,12 @@
+(module tc g
+  (defcap g () true)
+
+  (defschema remove-schema
+    foo:integer
+    bar:string)
+
+  (defun use-remove (a:object{remove-schema})
+    (remove "foo" a)
+  )
+
+  )

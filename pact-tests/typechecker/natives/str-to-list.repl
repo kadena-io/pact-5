@@ -1,0 +1,6 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-str-to-list(a:string)
+    (str-to-list a)
+  ))

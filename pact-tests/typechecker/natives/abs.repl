@@ -1,0 +1,18 @@
+(module tc g
+  (defcap g () true)
+
+  (defun abs-integers (a:integer)
+    (abs a)
+  )
+
+  (defun abs-decimals (a:decimal)
+    (abs a)
+  )
+
+  (defun abs-generic (a) (abs a))
+
+  (defun use-abs ()
+    (+ (dec (abs-generic -1)) (abs-generic -1.0))
+  )
+
+  )

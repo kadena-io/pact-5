@@ -1,0 +1,17 @@
+(module tc g
+  (defcap g () true)
+
+  (defschema obj1
+    foo:integer
+    bar:integer
+    )
+
+  (defun use-at-obj (a:object{obj1})
+    (+ (at "foo" a)
+       (at "bar" a))
+  )
+
+  (defun use-at-list (a:[object{obj1}])
+    (use-at-obj (at 0 a))
+  )
+  )

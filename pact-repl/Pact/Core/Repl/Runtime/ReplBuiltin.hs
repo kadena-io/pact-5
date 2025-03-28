@@ -51,7 +51,6 @@ import Pact.Core.Repl.Utils
 import qualified Pact.Time as PactTime
 import Data.IORef
 import qualified Pact.Core.Typed.Infer as Typed
-import qualified Pact.Core.Typed.Term as Typed
 
 prettyShowValue :: CEKValue b i m -> Text
 prettyShowValue = \case

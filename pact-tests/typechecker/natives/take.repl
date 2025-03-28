@@ -1,0 +1,11 @@
+(module tc g
+  (defcap g () true)
+
+  (defun take-string (a:string)
+    (take 2 a)
+  )
+
+  (defun take-list (a:[integer])
+    (take 2 a)
+  )
+  )

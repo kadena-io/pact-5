@@ -233,7 +233,7 @@ data NamedDeBruijn
   = NamedDeBruijn
   { _ndIndex :: !DeBruijn
   , _ndName :: Text }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 type DeBruijn = Word64
 

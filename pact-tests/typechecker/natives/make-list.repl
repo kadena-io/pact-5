@@ -1,0 +1,6 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-make-list (a b)
+    (make-list a b)
+  ))

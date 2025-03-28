@@ -1,0 +1,12 @@
+(module tc g
+  (defcap g () true)
+
+  (defun pow-integers (a:integer b:integer)
+    (^ a b)
+  )
+
+  (defun pow-decimals (a:decimal b:decimal)
+    (^ a b)
+  ))
+
+(typecheck "tc")

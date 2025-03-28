@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-base64-encode(a:string)
+    (base64-encode a)
+  )
+  )

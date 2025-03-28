@@ -1,0 +1,11 @@
+(module tc g
+  (defcap g () true)
+
+  (defun drop-string (a:string)
+    (drop 2 a)
+  )
+
+  (defun drop-list (a:[integer])
+    (drop 2 a)
+  )
+  )

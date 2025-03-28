@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-bw-flip (a:integer)
+    (~ a)
+  )
+  )

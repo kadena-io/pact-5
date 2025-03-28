@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-sort-obj ()
+    (sort ["foo"] [{"foo":1, "bar":2} {"foo":2, "bar":2}])
+  )
+
+  )

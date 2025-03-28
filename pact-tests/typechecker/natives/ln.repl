@@ -1,0 +1,11 @@
+(module tc g
+  (defcap g () true)
+
+  (defun ln-decimal (a:decimal)
+    (ln a)
+  )
+
+  (defun ln-integer (a:integer)
+    (ln a)
+  )
+  )

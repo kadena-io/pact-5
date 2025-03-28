@@ -1,0 +1,11 @@
+(module tc g
+  (defcap g () true)
+
+  (defun length-string (a:string)
+    (length a)
+  )
+
+  (defun length-list (a:[integer])
+    (length a)
+  )
+  )

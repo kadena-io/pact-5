@@ -50,6 +50,7 @@ module Pact.Core.Typed.Type
  , liftType
  , fromCorePrimType
  , renderPrimType
+ , typeSchemesAlphaEquivalent
  )where
 
 import Control.DeepSeq
@@ -195,7 +196,7 @@ data Type n
   | TyObject (RowTy n)
   | TyTable (RowTy n)
   | TyModRef (MRef n)
-  | TyCapToken -- (CapRef n) -- todo: capref is useful for FV but for now exclude it
+  | TyCapToken
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable, Generic)
 
 data MRef n
@@ -293,11 +294,12 @@ instance Pretty n => Pretty (Type n) where
     TyList n ->
       Pretty.brackets (pretty n)
     TyFun arg ret ->
-      doParen arg (pretty arg) <+> "->" <+> pretty ret
-      where
-      doParen TyFun{} = Pretty.parens
-      doParen TyNullary{} = Pretty.parens
-      doParen _ = id
+      Pretty.parens ("->" <+> pretty arg <+> pretty ret)
+      -- doParen arg (pretty arg) <+> "->" <+> pretty ret
+      -- where
+      -- doParen TyFun{} = Pretty.parens
+      -- doParen TyNullary{} = Pretty.parens
+      -- doParen _ = id
     TyNullary ret ->
       Pretty.parens ("=>" <+> pretty ret)
     TyObject m ->
@@ -322,12 +324,12 @@ data BuiltinTC n
   | IsValue (Type n)
   | RoseSubRow (RoseRow n) (RoseRow n)
   | RoseRowEq (RoseRow n) (RoseRow n)
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 data RoseRow n
   = RoseRowTy (RowTy n)
   | RoseRowCat (RoseRow n) (RoseRow n)
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 instance Pretty ty => Pretty (RoseRow ty) where
   pretty = \case
@@ -396,6 +398,20 @@ data DefnType tv =
   IndexedDefpactStepType (IntMap (Type Void))
   | NotIndexed (TypeScheme tv)
   deriving Show
+
+instance Ord tv => Eq (DefnType tv) where
+  (IndexedDefpactStepType l) == (IndexedDefpactStepType r) = l == r
+  (NotIndexed t) == (NotIndexed t') =
+    typeSchemesAlphaEquivalent t t'
+  _ == _ = False
+
+typeSchemesAlphaEquivalent :: (Ord tv, Eq tv') => TypeScheme tv -> TypeScheme tv' -> Bool
+typeSchemesAlphaEquivalent (TypeScheme tvs preds ty) (TypeScheme tvs' preds' ty')
+  | length tvs /= length tvs' = False
+  | otherwise =
+    let m = M.fromList (zip tvs tvs')
+        replace n = m M.! n
+    in (fmap replace ty == ty') && ((fmap.fmap) replace preds == preds')
 
 instance Pretty Schema where
   pretty (Schema _qn tys) =

@@ -1,0 +1,11 @@
+(module tc g
+  (defcap g () true)
+
+  (defun sqrt-decimal (a:decimal)
+    (sqrt a)
+  )
+
+  (defun sqrt-integer (a:integer)
+    (sqrt a)
+  )
+  )

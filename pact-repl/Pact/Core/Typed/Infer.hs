@@ -73,8 +73,6 @@ import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Repl.Utils
 
-import Debug.Trace
-
 -- [Inference]
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 --
@@ -264,6 +262,7 @@ data SpecialOverload
   | YieldOverload
   | YieldToChainOverload
   | ResumeOverload
+  | ContainsOverload
   deriving (Eq, Ord, Show)
 
 coreBuiltinToSpecialOverload :: CoreBuiltin -> Maybe SpecialOverload
@@ -275,6 +274,8 @@ coreBuiltinToSpecialOverload = \case
   CoreYieldToChain -> Just YieldToChainOverload
   CoreRemove -> Just RemoveOverload
   CoreResume -> Just ResumeOverload
+  CoreContains -> Just ContainsOverload
+  CoreSortObject -> Just SortObjOverload
   _ -> Nothing
 
 toSpecialOverload :: AsCoreBuiltin b => b -> Maybe SpecialOverload
@@ -308,6 +309,7 @@ specialOverLoadToCoreBuiltin = \case
   YieldOverload -> CoreYield
   YieldToChainOverload -> CoreYieldToChain
   ResumeOverload -> CoreResume
+  ContainsOverload -> CoreContains
 
 liftCoreType :: i -> IR.Type -> InferM s b i (Type a)
 liftCoreType i = \case
@@ -447,7 +449,7 @@ instance TypeOfBuiltin CoreBuiltin where
     CoreReverse -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      pure $ TypeScheme [aVar] [] (TyList a :~> TyList a)
+      pure $ TypeScheme [aVar] [ListLike a] (a :~> a)
     -- map: forall a b. (a -> b) -> [a] -> [b]
     CoreMap -> do
       let aVar = TypeVariable 1 "a"
@@ -509,7 +511,7 @@ instance TypeOfBuiltin CoreBuiltin where
     CoreDistinct -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
-      pure $ TypeScheme [aVar] [Ord a] (TyList a :~> TyList a)
+      pure $ TypeScheme [aVar] [Eq a] (TyList a :~> TyList a)
     -- Note: the type here is a fallback type
     -- The actual type of format when given a list literal is handled in `inferCoreBuiltinOverload`
     -- format : string -> [string] -> string
@@ -518,9 +520,9 @@ instance TypeOfBuiltin CoreBuiltin where
     -- enumerate : integer -> integer -> integer
     CoreEnumerate ->
       pure $ NonGeneric (TyInt :~> TyInt :~> TyList TyInt)
-    -- enumerate-step-n : integer -> integer -> [integer]
+    -- enumerate-step-n : integer -> integer -> integer -> [integer]
     CoreEnumerateStepN ->
-      pure $ NonGeneric (TyInt :~> TyInt :~> TyList TyInt)
+      pure $ NonGeneric (TyInt :~> TyInt :~> TyInt :~> TyList TyInt)
     -- show : forall a. Show a => a -> String
     CoreShow -> do
       let aVar = TypeVariable 0 "a"
@@ -595,40 +597,60 @@ instance TypeOfBuiltin CoreBuiltin where
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [] (TyInt :~> TyList a :~> a)
+    -- make-list : forall a. integer -> a -> [a]
     CoreMakeList -> do
       let aVar = TypeVariable 0 "a"
           a = TyVar aVar
       pure $ TypeScheme [aVar] [] (TyInt :~> a :~> TyList a)
+    -- base64-encode : string -> string
     CoreB64Encode ->
       pure $ NonGeneric (TyString :~> TyString)
+    -- base64-decode : string -> string
     CoreB64Decode ->
       pure $ NonGeneric (TyString :~> TyString)
+    -- str-to-list : string -> [string]
     CoreStrToList ->
       pure $ NonGeneric (TyString :~> TyList TyString)
+    -- yield : forall (a: ROW) . object{a} -> object{a}
     CoreYield -> do
       let aVar = RowVariable 0 "a"
       pure $ TypeScheme [aVar] [] (TyObject (RowVar aVar) :~> TyObject (RowVar aVar))
+    -- yield-to-chain : forall (a: ROW) . object{a} -> string -> object{a}
     CoreYieldToChain -> do
       let aVar = RowVariable 0 "a"
       pure $ TypeScheme [aVar] [] (TyObject (RowVar aVar) :~> TyString :~> TyObject (RowVar aVar))
+    -- resume needs the previous yield form to typecheck, otherwise it simply will not.
     CoreResume ->
         throwTypecheckError $ CannotStaticallyDetermineRowOpSig "resume" info
+    -- bind : forall (a: ROW, b: TYPE) . object{a} -> (object{a} -> b) -> b
     CoreBind -> do
       let aVar = RowVariable 1 "a"
           bodyVar = TypeVariable 0 "b"
       pure $ TypeScheme [aVar, bodyVar] [] (TyObject (RowVar aVar) :~> (TyObject (RowVar aVar) :~> TyVar bodyVar) :~> TyVar bodyVar)
+    -- require-capability : cap-token -> bool
     CoreRequireCapability ->
       pure $ NonGeneric (TyCapToken :~> TyBool)
+    -- compose-capability : cap-token -> bool
     CoreComposeCapability ->
       pure $ TypeScheme [] [] (TyCapToken :~> TyBool)
+    -- install-capability : cap-token -> string
     CoreInstallCapability ->
       pure $ TypeScheme [] [] (TyCapToken :~> TyString)
-    CoreEmitEvent ->
+    -- emit-event : cap-token -> string
+    CoreEmitEvent -> do
       pure $ TypeScheme [] [] (TyCapToken :~> TyString)
-    CoreCreateTable ->
-      pure $ TypeScheme [] [] (TyCapToken :~> TyString)
+    CoreCreateTable -> do
+      let r = RowVariable 0 "a"
+      pure $ TypeScheme [r] [] (TyTable (RowVar r) :~> TyString)
+    -- describe-keyset : string -> guard
     CoreDescribeKeyset ->
       pure $ TypeScheme [] [] (TyString :~> TyGuard)
+    -- describe-module : string -> object{module-info}
+    -- where
+    -- (defschema module-info
+    --   hash:string
+    --   interfaces:[string]
+    --   name:string)
     CoreDescribeModule -> do
       pure $ NonGeneric (TyString :~> TyObject (RowConcrete schema))
       where
@@ -636,6 +658,12 @@ instance TypeOfBuiltin CoreBuiltin where
         [(Field "hash", TyString)
         ,(Field "interfaces", TyList TyString)
         ,(Field "name", TyString)]
+    -- describe-module : string -> object{table-info}
+    -- where
+    -- (defschema table-info
+    --   type:tystring
+    --   module:string
+    --   name:string)
     CoreDescribeTable -> do
       pure $ NonGeneric (TyString :~> TyObject (RowConcrete schema))
       where
@@ -664,10 +692,12 @@ instance TypeOfBuiltin CoreBuiltin where
       let rowVar = RowVariable 0 "row"
           fnTy = TyTable (RowVar rowVar) :~> TyString :~> TyObject (RowVar rowVar) :~> TyString
       pure $ TypeScheme [rowVar] [] fnTy
+    -- keys : forall (r : Row) . table{r} -> [string]
     CoreKeys -> do
       let rowVar = RowVariable 0 "row"
           fnTy = TyTable (RowVar rowVar) :~> TyList TyString
       pure $ TypeScheme [rowVar] [] fnTy
+    --
     CoreRead -> do
       let rowVar = RowVariable 0 "row"
           fnTy = TyTable (RowVar rowVar) :~> TyString :~> TyObject (RowVar rowVar)
@@ -1187,6 +1217,7 @@ ordInst i = \case
     PrimString -> pure (Just [])
     PrimTime -> pure (Just [])
     PrimUnit -> pure (Just [])
+    PrimBool -> pure (Just [])
     _ -> pure Nothing
   TyList t -> pure (Just [Located i (Ord t)])
   _ -> pure Nothing
@@ -1336,7 +1367,7 @@ roseRowEq i l r = do
       let keysL = M.keysSet lrow
           keysR = M.keysSet rrow
       if (keysL `S.isProperSubsetOf` keysR) then do
-        let remainingFields = M.difference lrow rrow
+        let remainingFields = M.difference rrow lrow
         zipWithM_ (\x y -> unify (Located i x) (Located i y)) (M.elems lrow) (M.elems (M.restrictKeys rrow keysL))
         unifyRowVar (Located i n) (Located i (RowConcrete remainingFields))
         pure (Just [])
@@ -1478,9 +1509,9 @@ split
   :: [TCPred i s]
   -> i
   -> InferM s b i ([TCPred i s], [TCPred i s])
-split ps i = do
-  ps' <- reduce i ps
-  partition' ([], []) ps'
+split ps _i = do
+  -- ps' <- reduce i ps
+  partition' ([], []) ps
   where
   partition' (ds, rs) (p@(Located _ ty) : xs) = do
     cond <- tcHasUnbound ty
@@ -1856,8 +1887,10 @@ generalizeWithTerm ty pp term
 -- These are currently disabled.
   generalizeWithTerm' = do
     preds <- nubPreds pp
-    (deferred, retained) <- split preds (view Typed.termInfo term)
+    -- (deferred, retained) <- split preds (view Typed.termInfo term)
+    preds' <- reduce (view Typed.termInfo term) preds
     (ty', (uniques, reverse -> ftvs)) <- runStateT (generalizeOnType ty) (S.empty, [])
+    (deferred, retained) <- split preds' (view Typed.termInfo term)
     (retained', (uniques', _)) <- runStateT (traverse genPred retained) (uniques, [])
     -- Todo: better error
     when (uniques /= uniques') $ error "type in preds that's not in the return tyoe"
@@ -1903,9 +1936,7 @@ generalizeWithTerm ty pp term
       RowVar tv -> lift (readTvRef tv) >>= \case
         Unbound n u l -> do
           cl <- lift currentLevel
-          traceM $ "trying to generalize: " <> T.unpack n
           when (l > cl) $ do
-            traceM $ "Generalizing " <> T.unpack n
             lift (writeTvRef tv (Bound n u))
             (uniques, ftvs) <- get
             when (S.notMember u uniques) $ put (S.insert u uniques, tv:ftvs)
@@ -2268,8 +2299,8 @@ inferFunctionArgs appInfo (ta, xs, ps) fnArg = case _locElem ta of
     pure (ret <$ ta, x':xs, ps ++ p)
   _ -> do
     tv1 <- TyVar . (`TypeVar` TyKind) <$> newTvRef
-    (tArg, fnArg', predsArg) <- inferTerm fnArg
-    unify ta tArg
+    (Located iterm tArg, fnArg', predsArg) <- inferTerm fnArg
+    unify ta (Located iterm (tArg :~> tv1))
     pure (Located appInfo tv1,fnArg':xs,ps ++ predsArg)
 
 inferCoreBuiltinOverload
@@ -2327,6 +2358,20 @@ inferCoreBuiltinOverload info (b, bi) args = case b of
         pure (rty', App (Builtin (fromSpecialOverload b) bi) (reverse xs) info, ps)
       Nothing ->
         throwTypecheckError $ CannotStaticallyDetermineRowOpSig "resume" info
+  ContainsOverload | [x, y] <- args -> do
+    (t1, x', px) <- inferTerm x
+    (t2, y', py) <- inferTerm y
+    (tyAdd, tvs, preds)  <- case (t1, t2) of
+      (Located _ TyString{}, Located _ TyString{}) ->
+        pure (TyString :~> TyString :~> TyBool, [], [])
+      _ -> do
+        ty <- typeOfBuiltin bi CoreContains
+        instantiateImported bi ty
+    tv <- TyVar <$> newTypeVar TyKind
+    unify (Located bi tyAdd) (Located info (_locElem t1 :~> _locElem t2 :~> tv))
+    -- TODO: this needs to be turned into a special form for sure
+    let retTerm = Typed.App (applyTypeVars (Typed.Builtin (review _CoreBuiltin CoreContains) bi) bi tvs)  [x', y'] info
+    pure (Located info tv, retTerm, px ++ py ++ preds)
   SortObjOverload | (IR.ListLit li _:hs) <- args, Just fields <- traverse _stringLit li -> do
     (ty, tvs, preds) <- instantiateImported bi (sortObjType fields)
     (rty, xs', ps) <- foldlM (inferFunctionArgs info) (Located bi ty, [], []) hs
@@ -2441,12 +2486,6 @@ inferDefun mn mh (IR.Defun spec dfargs term info) = do
 
 
   (tys, tcterm, deferred) <- generalizeWithTerm dfTy preds term'
-  dbged <- _dbgTypedTerm tcterm
-  tysDbg <- _dbgTypeScheme tys
-  level <- currentLevel
-  traceM $ "POST DEFUN LEVEL: " <> show level
-  traceM $ "POST DEFUN INFERENCE TYS " ++ renderCompactString tysDbg
-  traceM $ "POST DEFUN INFERENCE" ++ renderCompactString (() <$ dbged)
   deferred' <- reduce info deferred
   unless (null deferred') $ do
     deferredDbg <- traverse _dbgPred deferred'
@@ -2481,26 +2520,32 @@ inferDefPact mn mh (IR.DefPact spec args steps info) = do
         locally tcStepCtx (const (StepIndex i))
         $ locally tcVarEnv (argtys RAList.++)
         $ inferTerm term
-      ty' <- ensureNoTyVars info (_locElem ty)
       p <- reduce info preds
+      ty' <- ensureNoTyVars (_locLocation ty) (_locElem ty)
       unless (null p) $ do
         p' <- traverse _dbgPred p
         throwTypecheckError $ CannotResolveConstraints p' info
       term'' <- debruijnizeTermTypes info term'
       pure (ty', Step term'', i)
     IR.StepWithRollback s rb -> do
+      fstYieldTy <- use tcYieldTy
       (ty, s', preds) <-
         locally tcStepCtx (const (StepIndex i))
         $ locally tcVarEnv (argtys RAList.++)
         $ inferTerm s
-      ty' <- ensureNoTyVars info (_locElem ty)
+      currYieldTy <- use tcYieldTy
+      -- Ensure we set the yield type to whatever it was before the first step was evaluated
+      tcYieldTy .= fstYieldTy
       (_, rb', preds') <- locally tcStepCtx (const (StepIndex i))
         $ locally tcVarEnv (argtys RAList.++)
         $ inferTerm rb
       p <- reduce info (preds ++ preds')
+      ty' <- ensureNoTyVars (_locLocation ty) (_locElem ty)
       unless (null p) $ do
         p' <- traverse _dbgPred p
         throwTypecheckError $ CannotResolveConstraints p' info
+      -- Restore the yield type to be the non-rollback yield type
+      tcYieldTy .= currYieldTy
       s'' <- debruijnizeTermTypes info s'
       rb'' <- debruijnizeTermTypes info rb'
       pure (ty', StepWithRollback s'' rb'', i)
@@ -2694,7 +2739,7 @@ inferModule
   -- ^ The module to infer
   -> M.Map FullyQualifiedName (IR.EvalDef b i)
   -- ^ The module's dependencies
-  -> InferM s b i (TypedModule b i)
+  -> InferM s b i (TypedModule b i, Map FullyQualifiedName (DefnType (TypeVar NamedDeBruijn)))
 inferModule (IR.Module mname mgov defs blessed imports impl mh _ _ info) deps = do
   let allDeps = M.toList $ M.fromList (toFqDep mname mh <$> defs) <> deps
   let sccInput = flattenSCCs $ stronglyConnCompR [ (defn, fqn, defFqns defn) | (fqn, defn) <- allDeps]
@@ -2702,7 +2747,8 @@ inferModule (IR.Module mname mgov defs blessed imports impl mh _ _ info) deps = 
     defn' <- inferDef (_fqModule fqn) (_fqHash fqn) defn
     pure (defn', fqn)
   let moduleDefs = fmap fst $ filter (\(_, fqn) -> _fqModule fqn == mname && _fqHash fqn == mh) defs'
-  pure (Module mname mgov moduleDefs blessed imports impl mh info)
+  defns <- uses tcFree (M.filterWithKey (\k _ -> _fqModule k == mname && _fqHash k == mh))
+  pure (Module mname mgov moduleDefs blessed imports impl mh info, defns)
 
 getInterface :: ModuleName -> InferM s b i (IR.EvalInterface b i)
 getInterface mn = views (tcLoaded.loModules) (M.lookup mn) >>= \case
@@ -2974,7 +3020,7 @@ typecheckModule
   :: TypeOfBuiltin b
   => i
   -> ModuleName
-  -> EvalM e b i (Either (TypecheckError i) (TypedModule b i))
+  -> EvalM e b i (Either (TypecheckError i) (TypedModule b i, Map FullyQualifiedName (DefnType (TypeVar NamedDeBruijn))))
 typecheckModule i mn = do
   (m, deps) <- getModuleWithDependencies i mn
   -- Load the interfaces used by this module into our `Loaded` env
