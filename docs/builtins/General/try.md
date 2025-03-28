@@ -8,7 +8,7 @@ Pure expressions don't allow mutable variables, reference arguments, or input an
 
 Unlike impure expressions that support reading and writing to tables and working with non-deterministic state, pure expressions:
 
-- Don't write to memory.
+- Don't write to the database.
 - Don't perform input or output operations.
 - Don't work with non-deterministic state. 
 
