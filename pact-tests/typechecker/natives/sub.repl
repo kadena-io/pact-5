@@ -1,0 +1,10 @@
+(module tc g
+  (defcap g () true)
+
+  (defun sub-integers (a:integer b:integer)
+    (- a b)
+  )
+
+  (defun sub-decimals (a:decimal b:decimal)
+    (- a b)
+  ))

@@ -1,0 +1,27 @@
+(module tc g
+  (defcap g () true)
+
+  (defun add-integers (a:integer b:integer)
+    (+ a b)
+  )
+
+  (defun add-decimals (a:decimal b:decimal)
+    (+ a b)
+  )
+
+  (defun add-strings (a:string b:string)
+    (+ a b)
+  )
+
+  (defun add-lists (a:[integer] b:[integer])
+    (+ a b)
+  )
+
+  (defschema obj1 a:integer)
+  (defschema obj2 b:string)
+
+  (defun add-objs (a:object{obj1} b:object{obj2})
+    (+ a b)
+  )
+
+  )

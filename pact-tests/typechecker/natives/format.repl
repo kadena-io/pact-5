@@ -1,0 +1,15 @@
+(interface foobar
+  (defun calls-foobar:integer ())
+  )
+
+(module tc g
+  (defcap g () true)
+
+  (defschema foo
+    m:module{foobar}
+    )
+  (deftable foo-tbl:{foo})
+
+  (defun use-format ()
+    (format "whatever" [1 2.5 "hello" foo-tbl (at "m" (read foo-tbl "foo")) (read-keyset "k") [1] (g) (time "foo") true ()])
+  ))

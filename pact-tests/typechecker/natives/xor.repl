@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-bw-xor (a:integer)
+    (xor 1 a)
+  )
+  )

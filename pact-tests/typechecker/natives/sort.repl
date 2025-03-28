@@ -1,0 +1,13 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-sort ()
+    (sort [1 2 3])
+    (sort ["a" "b" "c"])
+    (sort [3.2 1.2 3.4])
+    (sort [() () ()])
+    (sort [(time "2016-07-22T11:26:35Z")])
+    (sort [true true false])
+  )
+
+  )

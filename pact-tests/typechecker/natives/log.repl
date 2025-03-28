@@ -1,0 +1,11 @@
+(module tc g
+  (defcap g () true)
+
+  (defun log-decimal (a:decimal)
+    (log a a)
+  )
+
+  (defun log-integer (a:integer)
+    (log a a)
+  )
+  )

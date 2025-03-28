@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-ceiling-prec (a:decimal)
+    (ceiling a 2)
+  )
+  )

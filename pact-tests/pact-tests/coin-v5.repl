@@ -34,6 +34,7 @@
 
 (commit-tx)
 
+(typecheck "coin")
 ;(verify 'coin)
 
 ;; Account creation and account details unit tests

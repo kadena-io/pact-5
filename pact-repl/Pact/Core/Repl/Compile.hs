@@ -48,7 +48,6 @@ import Pact.Core.Repl.Utils
 import Pact.Core.IR.Desugar
 import Pact.Core.IR.Term
 import Pact.Core.Compile
-import Pact.Core.Type
 import Pact.Core.Environment
 import Pact.Core.Info
 import Pact.Core.Errors

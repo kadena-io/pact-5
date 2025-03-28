@@ -331,6 +331,10 @@ library pact-repl
     Pact.Core.IR.Eval.Direct.ReplBuiltin
     Pact.Core.IR.Eval.Direct.Types
 
+    Pact.Core.Typed.Term
+    Pact.Core.Typed.Type
+    Pact.Core.Typed.Infer
+
   build-depends:
     , pact-tng
     , pact-tng:pact-crypto
@@ -599,5 +603,7 @@ test-suite core-tests
     , Pact.Core.Test.ClientTests
     , Pact.Core.Test.ServerUtils
     , Pact.Core.Test.TransitiveDependencyTests
+    , Pact.Core.Test.ReplTestUtils
+    , Pact.Core.Test.TypecheckerTests
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto

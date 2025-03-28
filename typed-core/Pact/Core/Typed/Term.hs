@@ -199,15 +199,15 @@ data Term name tyname builtin info
   -- /\a. e where a is a type variable
   | Sequence (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Blocks (to be replaced by Seq)
-  | Conditional (BuiltinForm (Term name tyname builtin info)) info
-  -- ^ Conditional exprs
+  | BuiltinForm (BuiltinForm (Term name tyname builtin info)) info
+  -- ^ BuiltinForm exprs
   | ListLit (Type tyname) [Term name tyname builtin info] info
   -- ^ List literals
   | DynInvoke (Term name tyname builtin info) Text info
   -- ^ Dynamic invoke.
-  | Try (Term name tyname builtin info) (Term name tyname builtin info) info
+  -- | Try (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Error handling
-  | CapabilityForm (CapForm name (Term name tyname builtin info)) info
+  -- | CapabilityForm (CapForm name (Term name tyname builtin info)) info
   -- ^ Capabilities
   | Error (Type tyname) Text info
   -- ^ Error term
@@ -275,7 +275,7 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       "/\\" <> Pretty.hsep (pretty <$> ns) <> "." <+> pretty term
     Sequence e1 e2 _ ->
       Pretty.parens ("seq" <+> pretty e1 <+> pretty e2)
-    Conditional c _ -> pretty c
+    BuiltinForm c _ -> pretty c
     ListLit ty li _ ->
       Pretty.brackets (Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
     Builtin b _ -> pretty b
@@ -312,8 +312,8 @@ termBuiltin f = \case
     TyAbs ne <$> termBuiltin f te <*> pure info
   Sequence te te' info ->
     Sequence <$> termBuiltin f te <*> termBuiltin f te' <*> pure info
-  Conditional o info ->
-    Conditional <$> traverse (termBuiltin f) o <*> pure info
+  BuiltinForm o info ->
+    BuiltinForm <$> traverse (termBuiltin f) o <*> pure info
   ListLit ty tes info ->
     ListLit ty <$> traverse (termBuiltin f) tes <*> pure info
   Try te te' info ->
@@ -341,8 +341,8 @@ termInfo f = \case
     TyAbs ns e <$> f i
   Sequence e1 e2 i ->
     Sequence e1 e2 <$> f i
-  Conditional o info ->
-    Conditional o <$> f info
+  BuiltinForm o info ->
+    BuiltinForm o <$> f info
   ListLit ty v i ->
     ListLit ty v <$> f i
   Builtin b i ->
@@ -373,8 +373,8 @@ instance Plated (Term name tyname builtin info) where
       ListLit ty <$> traverse f ts <*> pure i
     Sequence e1 e2 i ->
       Sequence <$> f e1 <*> f e2 <*> pure i
-    Conditional o i ->
-      Conditional <$> traverse (plate f) o <*> pure i
+    BuiltinForm o i ->
+      BuiltinForm <$> traverse (plate f) o <*> pure i
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
     Try e1 e2 i ->

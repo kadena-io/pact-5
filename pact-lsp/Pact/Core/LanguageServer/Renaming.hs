@@ -7,7 +7,6 @@ import Pact.Core.Builtin
 import Pact.Core.IR.Term
 import Pact.Core.Names
 import Pact.Core.Info
-import Pact.Core.Type
 
 import Pact.Core.LanguageServer.Utils
 

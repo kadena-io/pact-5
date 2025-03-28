@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-zip ()
+    (zip (lambda (x y) (+ x (dec y))) [1.0 3.5 2.2] (enumerate 0 10))
+  )
+
+  )
