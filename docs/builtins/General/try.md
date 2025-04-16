@@ -3,14 +3,10 @@
 Use the `try` function to attempt a **pure** action, returning a default value in the case of failure. 
 Pure functions and pure expressions perform operations that produce a resulting value with no side effects. 
 
-Pure functions always return identical results for identical arguments.
-Pure expressions don't allow mutable variables, reference arguments, or input and output operations.
+In most programming languages, pure functions and expressions always return identical results for identical arguments and don't allow mutable variables or input and output operations.
 
-Unlike impure expressions that support reading and writing to tables and working with non-deterministic state, pure expressions:
-
-- Don't write to the database.
-- Don't perform input or output operations.
-- Don't work with non-deterministic state. 
+In Pact, you can use the `try` built-in function to read from database tables and there's no guarantee that a value in a table remains that same between two calls of the same pure action.
+You can't use the `try` built-in function to write to  database tables.
 
 ### Basic syntax
 
