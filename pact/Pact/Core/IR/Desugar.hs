@@ -414,14 +414,22 @@ desugarLispTerm = \case
   Lisp.Binding fs hs i -> do
     hs' <- traverse desugarLispTerm hs
     body <- bindingBody hs'
+    bndTrns <- (\c -> if c then bindToLet else bindToLetPostFork)
+      <$> lift (isExecutionFlagSet FlagDisablePact52)
     let bodyLam b = Lam (pure (Arg objFreshText Nothing i)) b i
-    pure $ bodyLam $ foldr bindToLet body fs
+    pure $ bodyLam $ foldr bndTrns body fs
       where
       bindingBody hs' = case reverse hs' of
         [] -> throwDesugarError EmptyBindingBody i
         x:xs -> pure $ foldl' (\acc e -> Sequence e acc i) x xs
       objFreshText = "#bindObject"
       objFreshVar = Var (BN (BareName objFreshText)) i
+      bindToLetPostFork (Field field, marg) body =
+        let arg = toArg marg
+            argI = _argInfo arg
+            fieldLit = Constant (LString field) argI
+            access = App (Builtin (liftCoreBuiltin CoreAt) argI) [fieldLit, objFreshVar] argI
+        in Let arg access body i
       bindToLet (Field field, marg) body =
         let arg = toArg marg
             fieldLit = Constant (LString field) i
