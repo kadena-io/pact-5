@@ -1839,8 +1839,8 @@ unifyTyVar locTv@(Located li tv) locTy@(Located ri t1) = do
       occurs locTv locTy
       writeTvRef tv (LinkTy t1)
     Bound{} -> do
-      t1' <- _dbgType t1
-      t2' <- _dbgType $ TyVar tv
+      t1' <- _dbgType $ TyVar tv
+      t2' <- _dbgType t1
       throwTypecheckError $ UnificationFailure (Located li t1') (Located ri t2')
     LinkTy tyLink -> unify (Located li tyLink) locTy
     _ -> wellKindedGuaranteed
@@ -1878,7 +1878,7 @@ unify lloc@(Located li lt) rloc@(Located ri rt) = unify' lt rt
   unify' _ (TyVar tv)  = unifyTyVar (Located ri tv) lloc
   unify' (TyFun l r) (TyFun l' r') =
     unify (Located li l) (Located ri l') *> unify (Located li r) (Located ri r')
-  unify' (TyList t) (TyList t') = unify (Located li t) (Located li t')
+  unify' (TyList t) (TyList t') = unify (Located li t) (Located ri t')
   unify' (TyPrim p) (TyPrim p') | p == p' = pure ()
   unify' TyCapToken TyCapToken = pure ()
   unify' (TyObject r) (TyObject l) = unifyRow (Located li l) (Located ri r)
@@ -2215,7 +2215,7 @@ checkTermType checkty = \case
     pure (te2, term', pe1 ++ pe2)
   term@(IR.App _ _ _i) -> do
     (termTy, term', preds) <- inferTerm term
-    unify termTy checkty
+    unify checkty termTy
     pure (termTy, term', preds)
   IR.Sequence l r i -> do
     (_, l', pl) <- inferTerm l
@@ -2283,7 +2283,7 @@ checkTermType checkty = \case
     pure (Located i ty, term', preds)
   IR.Constant lit i -> do
       let ty = typeOfLit lit
-      unify (Located i ty) checkty
+      unify checkty (Located i ty)
       pure (Located i ty, Constant lit i, [])
   IR.ListLit tes i -> case _locElem checkty of
     TyList ty -> do
@@ -2293,7 +2293,7 @@ checkTermType checkty = \case
       pure (Located i (TyList ty), term', preds)
     _ -> do
       tup <- inferTerm (IR.ListLit tes i)
-      unify (view _1 tup) checkty
+      unify checkty (view _1 tup)
       pure tup
   IR.Nullary term i -> do
     t@(te', _, _) <- inferTerm (IR.Nullary term i)
@@ -2476,7 +2476,7 @@ inferFunctionArgs
   -> InferM s b i (Located i (Type (TCTypeVar s)), [TCTerm s b i], [TCPred i s])
 inferFunctionArgs appInfo (ta, xs, ps) fnArg = case _locElem ta of
   TyFun arg ret -> do
-    (_, x', p) <- checkTermType (arg <$ ta) fnArg
+    (_, x', p) <- checkTermType (Located (view IR.termInfo fnArg) arg) fnArg
     pure (ret <$ ta, x':xs, ps ++ p)
   _ -> do
     tv1 <- TyVar . (`TypeVar` TyKind) <$> newTvRef
