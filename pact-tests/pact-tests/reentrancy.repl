@@ -1,0 +1,54 @@
+(interface foo-callable
+
+  (defun foo:integer (a:integer))
+
+  (defun bar:integer (b:integer))
+  )
+
+(module is-not-reentrant g
+
+  (defcap g () true)
+
+  (defcap SENSITIVE () true)
+
+  (defun definitely-not-reentrant (m:module{foo-callable})
+    (with-capability (SENSITIVE)
+      ; NAME IS TENTATIVE
+      (non-reentrant (m::foo 1))
+      (called-internal)
+      )
+  )
+
+  (defun called-internal ()
+    (require-capability (SENSITIVE))
+    123
+  ))
+
+(module malicious g
+  (defcap g () true)
+
+  (implements foo-callable)
+
+  (defun foo:integer (a:integer)
+    (is-not-reentrant.called-internal)
+  )
+
+  (defun bar:integer (b:integer)
+    (is-not-reentrant.called-internal)
+  ))
+
+(module non-malicious g
+    (defcap g () true)
+
+    (implements foo-callable)
+
+    (defun foo:integer (a:integer)
+      (+ a 1)
+    )
+
+    (defun bar:integer (b:integer)
+      (+ b 2)
+    ))
+
+(expect "non-malicious module still returns properly" 123 (is-not-reentrant.definitely-not-reentrant non-malicious))
+(expect-failure "malicious module execution fails due to reentrancy" "reentrancy not allowed on module: is-not-reentrant" (is-not-reentrant.definitely-not-reentrant malicious))

@@ -262,6 +262,7 @@ data SpecialForm
   | SFMap
   | SFCond
   | SFCreateUserGuard
+  | SFNonReentrant
   deriving (Eq, Show, Enum, Bounded)
 
 toSpecialForm :: Text -> Maybe SpecialForm
@@ -278,7 +279,16 @@ toSpecialForm = \case
   "do" -> Just SFDo
   "cond" -> Just SFCond
   "create-user-guard" -> Just SFCreateUserGuard
+  "non-reentrant" -> Just SFNonReentrant
   _ -> Nothing
+
+forkedToSpecialForm :: (Monad (t (EvalM e b i)), MonadTrans t) => Text -> t (EvalM e b i) (Maybe SpecialForm)
+forkedToSpecialForm f = do
+  flags <- lift (viewEvalEnv eeFlags)
+  case toSpecialForm f of
+    Just SFNonReentrant | S.member FlagDisablePact52 flags -> pure Nothing
+    v -> pure v
+{-# INLINE forkedToSpecialForm #-}
 
 conditionalLam2Arg :: (Term ParsedName ty1 builtin1 info  -> Term ParsedName ty2 builtin2 info  -> BuiltinForm (Term name Lisp.Type builtin3 info)) -> info -> Term name Lisp.Type builtin3 info
 conditionalLam2Arg c info = let
@@ -300,7 +310,7 @@ desugarSpecial
   -> [Lisp.Expr i]
   -> i
   -> RenamerM e b i (Term ParsedName Lisp.Type b i)
-desugarSpecial (bn@(BareName t), varInfo) dsArgs appInfo = case toSpecialForm t of
+desugarSpecial (bn@(BareName t), varInfo) dsArgs appInfo = forkedToSpecialForm t >>= \case
     Just sf -> goSpecial dsArgs sf
     Nothing -> desugarFn (Lisp.Var (BN bn) varInfo) dsArgs
   where
@@ -364,6 +374,9 @@ desugarSpecial (bn@(BareName t), varInfo) dsArgs appInfo = case toSpecialForm t 
       [e@Lisp.App{}] -> BuiltinForm <$> (CCreateUserGuard <$> desugarLispTerm e) <*> pure appInfo
       _ -> throwDesugarError (InvalidSyntax "create-user-guard must take one argument, which must be an application") appInfo
     SFMap -> desugar1ArgHOF MapV args
+    SFNonReentrant -> case args of
+      [x] -> BuiltinForm <$> (CNonReentrant <$> desugarLispTerm x) <*> pure appInfo
+      _ -> throwDesugarError (InvalidSyntax "non-reentrant must take two arguments") appInfo
     SFCond -> case reverse args of
       defCase:xs -> do
         defCase' <- desugarLispTerm defCase

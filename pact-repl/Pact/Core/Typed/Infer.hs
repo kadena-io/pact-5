@@ -2263,6 +2263,9 @@ checkTermType checkty = \case
         (_, ct', pe1) <- checkTermType (Located i TyCapToken) ct
         (_, body', pe2) <- checkTermType checkty body
         pure (Located i (_locElem checkty), CWithCapability ct' body', pe1 ++ pe2)
+      CNonReentrant term -> do
+        (outTy, outTerm, outPreds) <- checkTermType checkty term
+        pure (outTy, CNonReentrant outTerm, outPreds)
       CCreateUserGuard c -> case c of
         IR.App{} -> do
           unify checkty (Located i TyGuard)
@@ -2417,6 +2420,9 @@ inferTerm = \case
         (_, ct', pe1) <- checkTermType (Located i TyCapToken) ct
         (rty, body', pe2) <- inferTerm body
         pure (rty, CWithCapability ct' body', pe1 ++ pe2)
+      CNonReentrant term -> do
+        (outTy, outTerm, outPreds) <- inferTerm term
+        pure (outTy, CNonReentrant outTerm, outPreds)
       CCreateUserGuard c -> case c of
         IR.App{} -> do
           (t, c', pe1) <- inferTerm c

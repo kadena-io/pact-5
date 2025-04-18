@@ -273,6 +273,12 @@ evaluateTerm cont handler env (BuiltinForm c info) = case c of
         let handler' = CEKEnforceOne env' info str xs cont errState handler
         let cont' = CondC env' info EnforceOneC Mt
         evalCEK cont' handler' env' x
+  CNonReentrant term -> findCallingModule >>= \case
+    -- todo: give this own error its own ADT entry
+    Nothing -> throwExecutionError info (EvalError "can only call non-reentrant in module code")
+    Just mn -> do
+      let env' = env & ceNonReentrant %~ S.insert mn
+      evalCEK cont handler env' term
   CEnforceOne _ _ ->
     throwExecutionError info $ NativeExecutionError (NativeName "enforce-one") $
           "enforce-one: expected a list of conditions"
@@ -605,8 +611,16 @@ evalWithStackFrame
   -> EvalTerm b i
   -> EvalM e b i (EvalResult e b i)
 evalWithStackFrame info cont handler env mty sf body = do
-  cont' <- pushStackFrame info cont mty sf
-  evalCEK cont' handler env body
+  let callingModule = _fqModule $ _sfName sf
+  if S.notMember callingModule (_ceNonReentrant env) then do
+    cont' <- pushStackFrame info cont mty sf
+    evalCEK cont' handler env body
+  else
+    returnCEKError info cont handler $
+      UserEnforceError $
+        "reentrancy not allowed on module: " <> renderModuleName callingModule
+
+
 
 -- | Push a stack frame into the stack, and check it for recursion
 pushStackFrame
@@ -1598,7 +1612,7 @@ eval
   -> EvalM e b i PactValue
 eval purity benv term = do
   ee <- viewEvalEnv id
-  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) mempty False)
   evalNormalForm cekEnv term >>= \case
     VError stack err i ->
       throwUserRecoverableError' i stack err
@@ -1621,7 +1635,7 @@ evalWithinCap info purity benv (CapToken qualName vs) term = do
   ee <- viewEvalEnv id
   (_, mh) <- getDefCapQN info qualName
   let ct = CapToken (qualNameToFqn qualName mh) vs
-  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) mempty False)
   evalCap (view termInfo term) Mt CEKNoHandler cekEnv ct PopCapInvoke NormalCapEval term
     >>= \case
     VError stack err i ->
@@ -1641,7 +1655,7 @@ interpretGuard
   -> EvalM e b i PactValue
 interpretGuard info bEnv g = do
   ee <- viewEvalEnv id
-  let cekEnv = CEKEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) False
+  let cekEnv = CEKEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) mempty False
   enforceGuard info Mt CEKNoHandler cekEnv g >>= \case
     VError stack err i ->
       throwUserRecoverableError' i stack err
@@ -1661,7 +1675,7 @@ evalResumePact
 evalResumePact info bEnv mdpe = do
   ee <- viewEvalEnv id
   let pdb = _eePactDb ee
-  let env = CEKEnv mempty pdb bEnv (_eeDefPactStep ee) False
+  let env = CEKEnv mempty pdb bEnv (_eeDefPactStep ee) mempty False
   resumePact info Mt CEKNoHandler env mdpe >>= \case
     VError stack err i ->
       throwUserRecoverableError' i stack err
