@@ -27,7 +27,7 @@ The `env-sigs` function returns a string indicating that the transaction signatu
 The following example illustrates using the `env-sigs` function to sign a transaction with a specific public key and capability in the Pact REPL:
 
 ```pact
-(env-sigs [{"key": "9a23bf6a61f753d3ffa45c02b33c65b9dc80b8fb63857debcfe21fdb170fcd99", "caps": [PAYADMIN]}])
+(env-sigs [{"key": "58705e8699678bd15bbda2cf40fa236694895db614aafc82cf1c06c014ca963c", "caps": [(free.payments.PAYADMIN)]}])
 "Setting transaction signatures/caps"
 ```
 
