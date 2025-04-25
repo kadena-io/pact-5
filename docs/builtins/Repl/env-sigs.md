@@ -53,11 +53,11 @@ The following example illustrates using the `env-sigs` function to grant "any" k
     ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
     })
   (env-sigs [
-      { 'key: 'any
-       ,'caps: [(MINT (read-msg "token-id") (read-string 'account) 4.0)]}
+      { "key": "any"
+       ,"caps": [(MINT (read-msg "token-id") (read-string 'account) 4.0)]}
      ])
   
-  (mint (read-msg 'token-id) (read-msg 'account) 4.0)
+  (mint (read-msg "token-id") (read-msg "account") 4.0)
  
 (commit-tx)
 ```
