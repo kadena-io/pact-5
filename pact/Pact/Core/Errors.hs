@@ -191,6 +191,7 @@ module Pact.Core.Errors
  , mkBoundedText
  , PactErrorOrigin(..)
  , LocatedErrorInfo(..)
+ , unsafePactErrorToPrettyOnChainError
  ) where
 
 import Control.Lens hiding (ix)
@@ -1936,11 +1937,26 @@ instance JD.FromJSON PactOnChainError where
 pactErrorToOnChainError :: PactError LineInfo -> PactOnChainError
 pactErrorToOnChainError pe = let
   info = view peInfo (locatePactErrorInfo pe)
+  -- NOTE: THIS WILL AFFECT REPLAY, DO NOT CHANGE WITHOUT A FORK
+  errType = toErrorType pe
+  in PactOnChainError (ErrorType errType) (pactErrorToBoundedText pe) info
+  where
+  toErrorType = \case
+    PELexerError{} -> "SyntaxError"
+    PEParseError{} -> "SyntaxError"
+    PEExecutionError{} -> "EvalError"
+    PEUserRecoverableError{} -> "TxFailure"
+    PEDesugarError{} -> "EvalError"
+    PEVerifierError{} -> "EvalError"
+
+unsafePactErrorToPrettyOnChainError :: PactError LineInfo -> PactOnChainError
+unsafePactErrorToPrettyOnChainError pe = let
+  info = view peInfo (locatePactErrorInfo pe)
   -- Inner tag is
   -- Drop the first 2 PE characters
   -- NOTE: THIS WILL AFFECT REPLAY, DO NOT CHANGE WITHOUT A FORK
   errType = toErrorType pe
-  in PactOnChainError (ErrorType errType) (pactErrorToBoundedText pe) info
+  in PactOnChainError (ErrorType errType) (BoundedText $ renderCompactText pe) info
   where
   toErrorType = \case
     PELexerError{} -> "SyntaxError"
