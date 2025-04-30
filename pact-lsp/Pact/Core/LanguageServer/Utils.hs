@@ -35,6 +35,7 @@ termAt p term
           CEnforce a b -> termAt p a <|> termAt p b
           CWithCapability a b -> termAt p a <|> termAt p b
           CTry a b -> termAt p a <|> termAt p b
+          CNonReentrant a -> termAt p a
           CCreateUserGuard a -> termAt p a
         <|> Just t
       t@(ListLit tms _) -> getAlt (foldMap (Alt . termAt p) tms) <|> Just t

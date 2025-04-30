@@ -27,7 +27,7 @@ module Pact.Core.IR.Eval.Direct.Types
  , DirectEnv(..)
  , ceLocal, ceDefPactStep
  , ceBuiltins, cePactDb
- , ceInCap
+ , ceInCap, ceNonReentrant
  , pattern VLiteral
  , pattern VString
  , pattern VInteger
@@ -66,6 +66,7 @@ import Data.RAList(RAList)
 import Data.Map.Strict(Map)
 import Data.Vector(Vector)
 import Pact.Time(UTCTime)
+import Data.Set(Set)
 import qualified Data.Kind as K
 
 
@@ -222,6 +223,7 @@ data DirectEnv e b i
   , _cePactDb :: PactDb b i
   , _ceBuiltins :: BuiltinEnv e b i
   , _ceDefPactStep :: Maybe DefPactStep
+  , _ceNonReentrant :: Set ModuleName
   , _ceInCap :: Bool }
   deriving (Generic)
 
@@ -229,7 +231,7 @@ instance (NFData b, NFData i) => NFData (DirectEnv e b i)
 
 
 instance (Show i, Show b) => Show (DirectEnv e b i) where
-  show (DirectEnv e _ _ _ _) = show e
+  show (DirectEnv e _ _ _ _ _) = show e
 
 type NativeFunction (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = i -> b -> DirectEnv e b i -> [EvalValue e b i] -> EvalM e b i (EvalValue e b i)
