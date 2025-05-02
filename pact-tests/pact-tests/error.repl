@@ -1,0 +1,18 @@
+(begin-tx)
+(interface foo
+  (defun f:integer (x:integer))
+  )
+
+(module uses-error g
+  (defcap g:bool () (error "not upgradable"))
+
+  (defun f:integer (x:integer)
+    (error "not-callable"))
+  )
+
+(expect-failure "uses-error typechecks" "not-callable" (uses-error.f 1))
+(commit-tx)
+
+(begin-tx)
+(expect-failure "uses-error cannot acquire admin" "not upgradable" (acquire-module-admin uses-error))
+(commit-tx)

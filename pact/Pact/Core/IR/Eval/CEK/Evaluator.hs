@@ -273,6 +273,12 @@ evaluateTerm cont handler env (BuiltinForm c info) = case c of
         let handler' = CEKEnforceOne env' info str xs cont errState handler
         let cont' = CondC env' info EnforceOneC Mt
         evalCEK cont' handler' env' x
+  CPure e -> do
+    let env' = readOnlyEnv env
+    evalCEK cont handler env' e
+  CError e -> do
+    let cont' = EnforceErrorC info cont
+    evalCEK cont' handler env e
   CEnforceOne _ _ ->
     throwExecutionError info $ NativeExecutionError (NativeName "enforce-one") $
           "enforce-one: expected a list of conditions"
