@@ -2259,6 +2259,12 @@ checkTermType checkty = \case
         (_, catchE', pe1) <- checkTermType checkty catchE
         (_, tryE', pe2) <- checkTermType checkty tryE
         pure (Located i (_locElem checkty), CTry catchE' tryE', pe1 ++ pe2)
+      CPure e -> do
+        (eTy, e', pe) <- checkTermType checkty e
+        pure (eTy, CPure e', pe)
+      CError e -> do
+        (_, e', pe) <- checkTermType (Located i TyString) e
+        pure (checkty, CError e', pe)
       CWithCapability ct body -> do
         (_, ct', pe1) <- checkTermType (Located i TyCapToken) ct
         (_, body', pe2) <- checkTermType checkty body
@@ -2413,6 +2419,14 @@ inferTerm = \case
         (tyTry, tryE', pe2) <- inferTerm tryE
         unify tyCatch tyTry
         pure (tyCatch, CTry catchE' tryE', pe1 ++ pe2)
+      CPure e -> do
+        (eTy, e', pe) <- inferTerm e
+        pure (eTy, CPure e', pe)
+      CError e -> do
+        retTy <- TyVar <$> newTypeVar TyKind
+        (_, e', pe) <- checkTermType (Located i TyString) e
+        pure (Located i retTy, CError e', pe)
+
       CWithCapability ct body -> do
         (_, ct', pe1) <- checkTermType (Located i TyCapToken) ct
         (rty, body', pe2) <- inferTerm body
