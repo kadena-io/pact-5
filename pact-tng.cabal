@@ -357,6 +357,18 @@ library pact-lsp
     , lsp-types
     , filepath
 
+library pact-lint
+  import: pact-common
+  hs-source-dirs: pact-lint
+
+  exposed-modules:
+    Pact.Core.Lint
+
+  build-depends:
+    , pact-tng
+    , pact-tng:pact-repl
+    , filepath
+
 executable gasmodel
   import: pact-common
   hs-source-dirs: gasmodel
@@ -408,6 +420,7 @@ executable pact
                , pact-tng
                , pact-tng:pact-repl
                , pact-tng:pact-lsp
+               , pact-tng:pact-lint
                , optparse-applicative
                , pact-tng:pact-request-api
                , yaml
@@ -556,6 +569,7 @@ test-suite core-tests
     , pact-tng:pact-request-api
     , pact-tng:pact-repl
     , pact-tng:pact-lsp
+    , pact-tng:pact-lint
     , pact-tng:test-utils
     , pact-tng:unsafe
     , lsp-test >= 0.17
