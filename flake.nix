@@ -2,16 +2,8 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    hackage = {
-      url = "github:input-output-hk/hackage.nix";
-      flake = false;
-    };
-
-    hs-nix-infra = {
-      url = "github:kadena-io/hs-nix-infra";
-      inputs.hackage.follows = "hackage";
-    };
-
+    nixpkgs.follows = "haskellNix/nixpkgs-unstable";
+    haskellNix.url = "github:input-output-hk/haskell.nix";
     flake-utils.url = "github:numtide/flake-utils";
     nix-bundle-exe = { url = "github:3noch/nix-bundle-exe"; flake = false; };
   };
@@ -21,13 +13,9 @@
     trusted-public-keys = "nixcache.chainweb.com:FVN503ABX9F8x8K0ptnc99XEz5SaA4Sks6kNcZn2pBY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=";
   };
 
-  outputs = inputs@{ self, flake-utils, hs-nix-infra, ... }:
-    flake-utils.lib.eachSystem
-      [ "x86_64-linux" "x86_64-darwin"
-        "aarch64-linux" "aarch64-darwin"
-      ] (system:
+  outputs = inputs@{ self, nixpkgs, haskellNix, flake-utils, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
     let
-      inherit (hs-nix-infra) haskellNix nixpkgs;
       pkgs = import nixpkgs {
         inherit system overlays;
         inherit (haskellNix) config;
@@ -71,9 +59,6 @@
       });
 
       packages.default = packages.pact-binary;
-
-      packages.recursive = with hs-nix-infra.lib.recursive system;
-        wrapRecursiveWithMeta "pact-tng" "${wrapFlake self}.default";
 
       inherit (flake) devShell;
 
