@@ -655,6 +655,7 @@ sysOnlyEnv e
 
 evalWithStackFrame :: i -> StackFrame i -> Maybe Type -> EvalM e b i (EvalValue e b i) -> EvalM e b i (EvalValue e b i)
 evalWithStackFrame info sf mty act = do
+  checkRecursion
   esStack %= (sf:)
 #ifdef WITH_FUNCALL_TRACING
   timeEnter <- liftIO $ getTime ProcessCPUTime
@@ -662,6 +663,7 @@ evalWithStackFrame info sf mty act = do
 #endif
   v <- act
   esStack %= safeTail
+  esCheckRecursion %= getPrevRecCheck
   pv <- enforcePactValue info v
   rtcEnabled <- isExecutionFlagSet FlagDisableRuntimeRTC
   unless rtcEnabled $ maybeTCType info mty pv
@@ -670,6 +672,16 @@ evalWithStackFrame info sf mty act = do
   esTraceOutput %= (TraceFunctionExit timeExit sf info:)
 #endif
   return (VPactValue pv)
+  where
+  checkRecursion = do
+    RecursionCheck currentCalled <- uses esCheckRecursion NE.head
+    let qn = fqnToQualName (_sfName sf)
+    when (S.member qn currentCalled) $ throwExecutionError info (RuntimeRecursionDetected qn)
+    esCheckRecursion %= NE.cons (RecursionCheck (S.insert qn currentCalled))
+  getPrevRecCheck (_ :| l) = case l of
+    top : rest -> top :| rest
+    [] -> (RecursionCheck mempty) :| []
+
 {-# INLINE evalWithStackFrame #-}
 
 applyLamUnsafe
