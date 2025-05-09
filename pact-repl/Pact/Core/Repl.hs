@@ -104,7 +104,7 @@ runRepl = do
       Just rest -> catch' $ do
         let src = accumulator <> "\n" <> rest
         lift (replCurrSource .== defaultSrc{_scPayload=src})
-        eout <- lift (tryError (interpretReplProgramDirect (SourceCode "(interactive)" src)))
+        eout <- lift (tryError (interpretReplProgramBigStep (SourceCode "(interactive)" src)))
         case eout of
           Right _ -> pure ()
           -- Expected a final `)` in our input, thus, continue chugging

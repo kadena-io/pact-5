@@ -27,7 +27,7 @@
   )
 
 (env-gasmodel "table")
-(env-gaslimit 10) ; ensures test does not run forever in case recursion breaks
+(env-gaslimit 1000) ; ensures test does not run forever in case recursion breaks
 
 
-(expect-failure "Recursion should fail @ runtime" (knot2.callF knot1))
+(expect-failure "Recursion should fail @ runtime" "Recursion detected by the runtime. Recursing in function: knot2.callF" (knot2.callF knot1))
