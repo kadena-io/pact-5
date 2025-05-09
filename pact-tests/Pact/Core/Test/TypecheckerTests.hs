@@ -491,12 +491,13 @@ expectedNativeTypes = M.fromList . go
         , (Field "bar", TyString)]
       rv = RowVariable 0 "row"
     CoreWithDefaultRead ->
-      [ ("use-with-default-read", NotIndexed $ TypeScheme [rv] [constr1] (TyTable (RowVar rv) :~> TyObject (RowVar rv) :~> TyInt))
+      [ ("use-with-default-read", NotIndexed $ TypeScheme [rv1, rv2] [constr1, constr2] (TyTable (RowVar rv1) :~> TyObject (RowVar rv2) :~> TyInt))
       , ("tbl1", NotIndexed $ NonGeneric $ TyTable (RowConcrete sc1))
       , ("tbl2", NotIndexed $ NonGeneric $ TyTable (RowConcrete sc2))
       , ("invoke-with-default-read", NotIndexed $ NonGeneric $ TyNullary TyInt) ]
       where
-      constr1 = RoseSubRow (RoseConcrete subRowScm) (RoseVar rv)
+      constr1 = RoseSubRow (RoseConcrete subRowScm) (RoseVar rv2)
+      constr2 = RoseSubRow (RoseVar rv2) (RoseVar rv1)
       subRowScm = M.fromList
         [ (Field "foo", TyInt)
         ]
@@ -506,7 +507,8 @@ expectedNativeTypes = M.fromList . go
       sc2 = M.fromList
         [ (Field "foo", TyInt)
         , (Field "bar", TyString)]
-      rv = RowVariable 0 "row"
+      rv1 = RowVariable 1 "row1"
+      rv2 = RowVariable 0 "row2"
     CoreWithRead ->
       [ ("use-with-read", NotIndexed $ TypeScheme [rv] [constr1] (TyTable (RowVar rv) :~> TyInt))
       , ("tbl1", NotIndexed $ NonGeneric $ TyTable (RowConcrete sc1))

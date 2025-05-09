@@ -753,10 +753,12 @@ instance TypeOfBuiltin CoreBuiltin where
       pure $ TypeScheme [r1, r2] [rowConstr] fnTy
     -- with-default-read : forall (r1: ROW) . table<r1> -> string -> object<r1> -> (object<r1> -> a) -> a
     CoreWithDefaultRead -> do
-      let r1 = RowVariable 1 "r1"
+      let r1 = RowVariable 2 "r1"
+          r2 = RowVariable 1 "r2"
       let aVar = TypeVariable 0 "a1"
-      let fnTy = TyTable (RowVar r1) :~> TyString :~> TyObject (RowVar r1) :~> (TyObject (RowVar r1) :~> TyVar aVar) :~> TyVar aVar
-      pure $ TypeScheme [r1, aVar] [] fnTy
+      let fnTy = TyTable (RowVar r1) :~> TyString :~> TyObject (RowVar r2) :~> (TyObject (RowVar r2) :~> TyVar aVar) :~> TyVar aVar
+          constr = RoseSubRow (RoseRowTy (RowVar r2)) (RoseRowTy (RowVar r1))
+      pure $ TypeScheme [r1, r2, aVar] [constr] fnTy
     CoreWithRead -> do
       let r1 = RowVariable 1 "r1"
       let aVar = TypeVariable 0 "a1"
@@ -2734,12 +2736,13 @@ inferDefun mn mh (IR.Defun spec dfargs term info) = do
         [] -> TyNullary (_targType spec')
         _ -> foldr TyFun (_targType spec') (_targType <$> typedArgs)
   let m = RAList.fromList (reverse (typedArgToTypeScheme <$> typedArgs))
+      locatedRetTy = Located (_targInfo spec') (_targType spec')
   -- We don't want the error reported to be the location of the entire lambda, which is the same
   -- location as the entire function, so we "peel" the enclosing lambda off here, but
   -- inject the arguments into the env, then we infer, and unify. This way, we get a better error location
   -- in the case that the unification a few lines below fails
-  (termTy, rawTerm, preds) <- locally tcVarEnv (m RAList.++) $ inferTerm (unLam term)
-  unify (Located (_targInfo spec') (_targType spec')) termTy
+  (termTy, rawTerm, preds) <- locally tcVarEnv (m RAList.++) $ checkTermType locatedRetTy (unLam term)
+  unify locatedRetTy termTy
   leaveLevel
   -- Re-construct the term as a lambda
   let term' = Lam typedArgs rawTerm info
