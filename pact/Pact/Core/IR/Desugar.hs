@@ -262,6 +262,8 @@ data SpecialForm
   | SFMap
   | SFCond
   | SFCreateUserGuard
+  | SFPure
+  | SFError
   deriving (Eq, Show, Enum, Bounded)
 
 toSpecialForm :: Text -> Maybe SpecialForm
@@ -278,7 +280,18 @@ toSpecialForm = \case
   "do" -> Just SFDo
   "cond" -> Just SFCond
   "create-user-guard" -> Just SFCreateUserGuard
+  "error" -> Just SFError
+  "pure" -> Just SFPure
   _ -> Nothing
+
+forkedToSpecialForm :: (Monad (t (EvalM e b i)), MonadTrans t) => Text -> t (EvalM e b i) (Maybe SpecialForm)
+forkedToSpecialForm f = do
+  flags <- lift (viewEvalEnv eeFlags)
+  case toSpecialForm f of
+    Just SFError | S.member FlagDisablePact52 flags -> pure Nothing
+    Just SFPure | S.member FlagDisablePact52 flags -> pure Nothing
+    v -> pure v
+{-# INLINE forkedToSpecialForm #-}
 
 conditionalLam2Arg :: (Term ParsedName ty1 builtin1 info  -> Term ParsedName ty2 builtin2 info  -> BuiltinForm (Term name Lisp.Type builtin3 info)) -> info -> Term name Lisp.Type builtin3 info
 conditionalLam2Arg c info = let
@@ -300,7 +313,7 @@ desugarSpecial
   -> [Lisp.Expr i]
   -> i
   -> RenamerM e b i (Term ParsedName Lisp.Type b i)
-desugarSpecial (bn@(BareName t), varInfo) dsArgs appInfo = case toSpecialForm t of
+desugarSpecial (bn@(BareName t), varInfo) dsArgs appInfo = forkedToSpecialForm t >>= \case
     Just sf -> goSpecial dsArgs sf
     Nothing -> desugarFn (Lisp.Var (BN bn) varInfo) dsArgs
   where
@@ -377,6 +390,14 @@ desugarSpecial (bn@(BareName t), varInfo) dsArgs appInfo = case toSpecialForm t 
         pure $ BuiltinForm (CIf cond' body' b) i'
       toNestedIf _ _ =
         throwDesugarError (InvalidSyntax "cond: expected application of conditions") appInfo
+    SFError -> case args of
+      [x] ->
+        BuiltinForm <$> (CError <$> desugarLispTerm x) <*> pure appInfo
+      _ -> throwDesugarError (InvalidSyntax "error must take only 1 argument") appInfo
+    SFPure -> case args of
+      [x] -> do
+        BuiltinForm <$> (CPure <$> desugarLispTerm x) <*> pure appInfo
+      _ -> throwDesugarError (InvalidSyntax "pure must take only 1 argument") appInfo
 
 desugarLispTerm
   :: (DesugarBuiltin b)
