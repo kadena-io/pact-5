@@ -298,6 +298,7 @@
 (create-table persons)
 
 (commit-tx)
+(begin-tx)
 
 (use tctest)
 (expect-failure "missing fields" (tc-add-person { "name": "Mary" }))
@@ -367,3 +368,46 @@
   "evaluating ill-typed function should succeed with pact-4.7 features disabled"
   3
   (tc-test-function-return-types.f))
+
+(commit-tx)
+
+; Pact 5.3 TC improvements tests
+(begin-tx)
+(env-exec-config [])
+
+(module test-tc-with-default-read-subrow g
+  (defcap g () true)
+  (defschema foo a:integer b:integer c:string)
+  (deftable footable:{foo})
+
+  (defun subrow-typechecks-default-read ()
+    (with-default-read footable "stuart"
+      {"a":1, "c":"hello"}
+      {"a" := a, "c" := c}
+      (format "there are {} of {}" [a c])
+    )
+  ))
+
+(typecheck "test-tc-with-default-read-subrow")
+
+(interface foo-callable1
+  (defun foo-callable1:bool (s:string)))
+
+
+(interface foo-callable2
+  (defun foo-callable2:bool (s:string)))
+
+(module foo-callable-impl g
+  (defcap g () true)
+  (implements foo-callable1)
+  (implements foo-callable2)
+
+  (defun foo-callable1:bool (s:string)
+    true)
+  (defun foo-callable2:bool (s:string) true)
+
+  (defun is-foo-callable:module{foo-callable1} ()
+    foo-callable-impl)
+  )
+
+(typecheck "foo-callable-impl")
