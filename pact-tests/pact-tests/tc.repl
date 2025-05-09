@@ -411,3 +411,4 @@
   )
 
 (typecheck "foo-callable-impl")
+(commit-tx)
