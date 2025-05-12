@@ -299,6 +299,12 @@ evaluate env = \case
       chargeTryNodeWork info
       let env' = readOnlyEnv env
       catchRecoverable (evaluate env' tryExpr) (\_ _ -> evaluate env catchExpr)
+    CPure e -> do
+      let env' = readOnlyEnv env
+      evaluate env' e
+    CError e -> do
+      msg <- enforceString info =<< evaluate env e
+      throwUserRecoverableError info (UserEnforceError msg)
     CEnforceOne str (ListLit conds _) ->
       go conds
       where
