@@ -275,7 +275,8 @@ evaluate env = \case
       if b then evaluate env ifExpr
       else evaluate env elseExpr
     CEnforce cond str -> do
-      let env' = sysOnlyEnv env
+      pact52Disabled <- isExecutionFlagSet FlagDisablePact52
+      let env' = if not pact52Disabled then readOnlyEnv env else sysOnlyEnv env
       b <- enforceBool info =<< evaluate env' cond
       -- chargeGasArgs info (GAConstant constantWorkNodeGas)
       if b then return (VBool True)
@@ -888,7 +889,8 @@ runUserGuard info env (UserGuard qn args) =
   getModuleMemberWithHash info qn >>= \case
     (Dfun d, mh) -> do
       when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
-      let env' = sysOnlyEnv env
+      pact52Disabled <- isExecutionFlagSet FlagDisablePact52
+      let env' = if not pact52Disabled then readOnlyEnv env else sysOnlyEnv env
       clo <- mkDefunClosure d (qualNameToFqn qn mh) env'
       -- Todo: sys only here
       True <$ (applyLam info (C clo) (VPactValue <$> args) >>= enforcePactValue info)
