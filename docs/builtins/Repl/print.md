@@ -1,10 +1,10 @@
 ## print
 
-Use `print` to convert a `value` into a string and print it to the REPL logger (usually standard out).
+Use `print` to send a specified `value` as output to the REPL logger (usually standard out).
 
 ### Basic syntax
 
-To convert a `value` into a string and print it as REPL output, use the following syntax:
+To print a specified `value` as REPL output, use the following syntax:
 
 ```pact
 (print value)
@@ -12,11 +12,11 @@ To convert a `value` into a string and print it as REPL output, use the followin
 
 ### Arguments
 
-Use the following argument to specify the value to be converted into a string and printed using the `print` Pact function.
+Use the following argument to specify the value to be printed using the `print` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `value` | any | Specifies the value to be converted into a string and printed. |
+| `value` | any | Specifies the value to be printed. |
 
 ### Return value
 
