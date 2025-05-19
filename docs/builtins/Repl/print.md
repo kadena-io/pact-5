@@ -24,10 +24,13 @@ The `print` function returns the unit value `()`.
 
 ### Examples
 
-The following example demonstrates how to use the `print` function to convert a value to a string in the Pact REPL and print it:
+The following example demonstrates how to use the `print` function to print a string in the terminal when using the Pact command-line interpreter interactively:
 
 ```pact
-pact> (do (print "hello world!") (+ 1 2))
-"hello world!"
-3
+(typeof (print (+ "hello " "world")))
+"hello world"
+"unit"
 ```
+
+Note that you can only use the `print` built-in function when using Pact command-line interpreter interactively or in tests written in `.repl` files.
+You can't use the `print` function in Pact modules that you deploy on any network.

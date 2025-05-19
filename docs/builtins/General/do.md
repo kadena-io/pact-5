@@ -4,7 +4,7 @@ Use `do` to evaluate a sequence of expressions in order and only return the resu
 
 ### Basic syntax
 
-Use the following syntax:
+To evaluate a series of expressions, use the following syntax:
 
 ```pact
 (do (my-expression1) (my-expression2) (my-return-expression))
@@ -12,13 +12,17 @@ Use the following syntax:
 
 ### Examples
 
+The following example demonstrates using the do built-in function to evaluate three expressions using the Pact command-line interpreter interactively:
+
 ```pact
-pact> (do (print "hello world!") (+ 1 2) (+ 121 299))
-"hello world!"
+pact> (do (base64-encode "hello world!") (+ 1 2) (+ 121 299))
 420
 ```
 
-Notice how the return value is the last addition of `(+ 121 299)`. `do` evaluates every expression supplied, so if any expression errors along the way, the subsequent expressions will never be evaluated, as such:
+Notice that this example returns the value from the last expression evaluated, in this case, the result of the `(+ 121 299)` expression. 
+You should also note that the `do` built-in function evaluates every expression in order. 
+If any expression in the sequence results in an error, the remaining expressions are never evaluated.
+For example, if the first expression results in a error, only the error is returned:
 
 ```pact
 pact> (do (enforce false "boom") (+ 1 2))
@@ -26,3 +30,4 @@ pact> (do (enforce false "boom") (+ 1 2))
  1 | (do (enforce false "boom") (+ 1 2))
    |     ^^^^^^^^^^^^^^^^^^^^^^
 ```
+
