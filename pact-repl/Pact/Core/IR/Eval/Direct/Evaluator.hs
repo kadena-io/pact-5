@@ -125,7 +125,7 @@ eval
   -> EvalM e b i PactValue
 eval purity benv term = do
   ee <- viewEvalEnv id
-  let directEnv = envFromPurity purity (DirectEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  let directEnv = envFromPurity purity (DirectEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) mempty False)
   evaluate directEnv term >>= \case
     VPactValue pv -> pure pv
     _ -> throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
@@ -144,7 +144,7 @@ evalWithinCap info purity benv (CapToken qualName vs) term = do
   ee <- viewEvalEnv id
   (_, mh) <- getDefCapQN info qualName
   let ct = CapToken (qualNameToFqn qualName mh) vs
-  let cekEnv = envFromPurity purity (DirectEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  let cekEnv = envFromPurity purity (DirectEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) mempty False)
   evalCap (view termInfo term) cekEnv ct PopCapInvoke NormalCapEval term >>= \case
     VPactValue pv -> pure pv
     _ ->
@@ -159,7 +159,7 @@ interpretGuard
   -> EvalM e b i PactValue
 interpretGuard info bEnv g = do
   ee <- viewEvalEnv id
-  let eEnv = DirectEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) False
+  let eEnv = DirectEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) mempty False
   PBool <$> enforceGuard info eEnv g
 
 evalResumePact
@@ -171,7 +171,7 @@ evalResumePact
 evalResumePact info bEnv mdpe = do
   ee <- viewEvalEnv id
   let pdb = _eePactDb ee
-  let env = DirectEnv mempty pdb bEnv (_eeDefPactStep ee) False
+  let env = DirectEnv mempty pdb bEnv (_eeDefPactStep ee) mempty False
   resumePact info env mdpe >>= \case
     VPactValue pv -> pure pv
     _ ->
@@ -228,7 +228,9 @@ evaluate env = \case
         Just (VModRef mr) -> do
           modRefHash <- _mHash <$> getModule info (_mrModule mr)
           let nk = NTopLevel (_mrModule mr) modRefHash
-          evaluate env (Var (Name dArg nk) info)
+          caller <- findCallingModule
+          let env' = maybe env (\m -> over ceReentrant (S.insert m) env) caller
+          evaluate env' (Var (Name dArg nk) info)
         Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
         Nothing -> failInvariant info (InvariantInvalidBoundVariable (_nName n))
   Constant l _info -> do
@@ -415,7 +417,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
         (esCaps . csSlots) %= (CapSlot qualCapToken []:)
         (esCaps . csCapsBeingEvaluated) %= S.insert qualCapToken
-        _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
+        _ <- evalWithStackFrame info capStackFrame Nothing inCapEnv capBody
         (esCaps . csCapsBeingEvaluated) .= oldCapsBeingEvaluated
         evalWithCapBody info popType Nothing event env contbody
       -- Not automanaged _nor_ user managed.
@@ -425,7 +427,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
         (esCaps . csSlots) %= (CapSlot qualCapToken []:)
         (esCaps . csCapsBeingEvaluated) %= S.insert qualCapToken
         -- we ignore the capbody here
-        _ <- evalWithStackFrame info capStackFrame Nothing $ evaluate inCapEnv capBody
+        _ <- evalWithStackFrame info capStackFrame Nothing inCapEnv capBody
         (esCaps . csCapsBeingEvaluated) .= oldCapsBeingEvaluated
         case ecType of
           NormalCapEval -> do
@@ -457,7 +459,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
       -- this is done in `CapBodyC` and this is the only way to do this.
       (esCaps . csSlots) %= (CapSlot inCapBodyToken []:)
       (esCaps . csCapsBeingEvaluated) %= S.insert inCapBodyToken
-      _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
+      _ <- evalWithStackFrame info capStackFrame Nothing inCapEnv capBody
       (esCaps . csCapsBeingEvaluated) .= oldCapsBeingEvaluated
       when (ecType == NormalCapEval) $ do
         updatedV <- enforcePactValue info =<< applyLam info (C dfunClo) [VPactValue oldV, VPactValue newV]
@@ -475,7 +477,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
         esCaps . csSlots %= (CapSlot qualCapToken []:)
         (esCaps . csCapsBeingEvaluated) %= S.insert qualCapToken
         let inCapEnv = set ceLocal env' $ set ceInCap True $ env
-        _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
+        _ <- evalWithStackFrame info capStackFrame Nothing inCapEnv capBody
         (esCaps . csCapsBeingEvaluated) .= oldCapsBeingEvaluated
 
         evalWithCapBody info popType Nothing emittedEvent env contbody
@@ -654,15 +656,20 @@ sysOnlyEnv e
     DUserTables _ -> dbOpDisallowed
     _ -> _pdbRead pdb dom k
 
-evalWithStackFrame :: i -> StackFrame i -> Maybe Type -> EvalM e b i (EvalValue e b i) -> EvalM e b i (EvalValue e b i)
-evalWithStackFrame info sf mty act = do
+evalWithStackFrame :: IsBuiltin b => i -> StackFrame i -> Maybe Type -> DirectEnv e b i -> EvalTerm b i -> EvalM e b i (EvalValue e b i)
+evalWithStackFrame info sf mty env term = do
   checkRecursion
   esStack %= (sf:)
 #ifdef WITH_FUNCALL_TRACING
   timeEnter <- liftIO $ getTime ProcessCPUTime
   esTraceOutput %= (TraceFunctionEnter timeEnter sf info:)
 #endif
-  v <- act
+  let callingModule = _fqModule $ _sfName sf
+  reentrancyCheckDisabled <- isExecutionFlagSet FlagDisableReentrancyCheck
+  let env' = if S.notMember callingModule (_ceReentrant env) || reentrancyCheckDisabled
+             then env
+             else readOnlyEnv env
+  v <- evaluate env' term
   esStack %= safeTail
   esCheckRecursion %= getPrevRecCheck
   pv <- enforcePactValue info v
@@ -729,9 +736,9 @@ applyLam cloi vc@(C (Closure fqn ca arity term mty env _)) args
       zipWithM_ (\arg (Arg _ ty _) -> maybeTCType cloi ty arg) args' (NE.toList cloargs)
       let sf = StackFrame fqn args' SFDefun cloi
           varEnv = RAList.fromList (reverse args)
-      evalWithStackFrame cloi sf mty (evaluate (set ceLocal varEnv env) term)
+      evalWithStackFrame cloi sf mty (set ceLocal varEnv env) term
     NullaryClosure -> do
-      evalWithStackFrame cloi (StackFrame fqn [] SFDefun cloi) mty $ evaluate (set ceLocal mempty env) term
+      evalWithStackFrame cloi (StackFrame fqn [] SFDefun cloi) mty (set ceLocal mempty env) term
   | argLen > arity = throwExecutionError cloi ClosureAppliedToTooManyArgs
   | otherwise = case ca of
     NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
@@ -794,7 +801,7 @@ applyLam cloi (PC (PartialClosure li argtys nargs _ term mty env _)) args = do
   apply' _ e [] [] = do
     case li of
       Just sf -> do
-        evalWithStackFrame cloi sf mty $ evaluate (set ceLocal e env) term
+        evalWithStackFrame cloi sf mty (set ceLocal e env) term
       Nothing -> do
         evaluate (set ceLocal e env) term >>= enforcePactValue' cloi
   apply' n e (ty:tys) [] = do
@@ -1155,11 +1162,11 @@ applyPact i pc ps cenv nested = use esDefPactExec >>= \case
       result <- case (ps ^. psRollback, step) of
         (False, _) -> case ordinaryDefPactStepExec step of
           Just stepExpr ->
-            evalWithStackFrame i sf Nothing $ evaluate cenv stepExpr
+            evalWithStackFrame i sf Nothing cenv stepExpr
           Nothing ->
             throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
         (True, StepWithRollback _ rollbackExpr) ->
-          evalWithStackFrame i sf Nothing $ evaluate cenv rollbackExpr
+          evalWithStackFrame i sf Nothing cenv rollbackExpr
         (True, Step{}) ->
           throwExecutionError i (DefPactStepHasNoRollback ps)
         (True, LegacyStepWithEntity{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
@@ -1241,11 +1248,11 @@ applyNestedPact i pc ps cenv = use esDefPactExec >>= \case
       result <- case (ps ^. psRollback, step) of
         (False, _) -> case ordinaryDefPactStepExec step of
           Just stepExpr ->
-            evalWithStackFrame i sf Nothing $ evaluate cenv' stepExpr
+            evalWithStackFrame i sf Nothing cenv' stepExpr
           Nothing ->
             throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
         (True, StepWithRollback _ rollbackExpr) ->
-          evalWithStackFrame i sf Nothing $ evaluate cenv' rollbackExpr
+          evalWithStackFrame i sf Nothing cenv' rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
         (True, LegacyStepWithEntity{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
         (True, LegacyStepWithRBEntity{}) ->
