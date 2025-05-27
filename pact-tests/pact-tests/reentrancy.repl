@@ -1,0 +1,86 @@
+(begin-tx)
+(interface foo-callable
+
+  (defun foo:integer (a:integer))
+
+  (defun bar:integer (b:integer))
+  )
+
+(module is-not-reentrant g
+
+  (defcap g () true)
+
+  (defcap SENSITIVE () true)
+
+  (defschema test-schema counter:integer)
+
+  (deftable test-table:{test-schema})
+
+  (defun calls-mref-foo (m:module{foo-callable})
+    (with-capability (SENSITIVE)
+      ; NAME IS TENTATIVE
+      (m::foo 1)
+      )
+  )
+
+  (defun calls-mref-bar (m:module{foo-callable})
+    (with-capability (SENSITIVE)
+      ; NAME IS TENTATIVE
+      (m::bar 1)
+      )
+  )
+
+  (defun read-only-foo ()
+    (require-capability (SENSITIVE))
+    (at "counter" (read test-table "foo"))
+  )
+
+  (defun modifies-bar ()
+    (require-capability (SENSITIVE))
+    (with-read test-table "bar"
+     {"counter" := counter}
+     (let*
+      ((next (+ counter 1)))
+        (update test-table "bar" {"counter": next})
+        next
+      )
+    )
+  )
+  )
+
+(typecheck "is-not-reentrant")
+
+(create-table test-table)
+(insert test-table "foo" {"counter": 0})
+(insert test-table "bar" {"counter": 1})
+
+
+(module malicious g
+  (defcap g () true)
+
+  (implements foo-callable)
+
+  (defun foo:integer (a:integer)
+    (is-not-reentrant.read-only-foo)
+  )
+
+  (defun bar:integer (b:integer)
+    (is-not-reentrant.modifies-bar)
+  ))
+
+(module non-malicious g
+    (defcap g () true)
+
+    (implements foo-callable)
+
+    (defun foo:integer (a:integer)
+      (+ a 1)
+    )
+
+    (defun bar:integer (b:integer)
+      (+ b 2)
+    ))
+
+(expect "non-malicious module still returns properly" 2 (is-not-reentrant.calls-mref-foo non-malicious))
+(expect "malicious module can call read-only function" 0 (is-not-reentrant.calls-mref-foo malicious))
+(expect-failure "malicious module cannot call modifying function" "Error during database operation: Operation disallowed in read-only or sys-only mode" (is-not-reentrant.calls-mref-bar malicious))

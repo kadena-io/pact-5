@@ -161,7 +161,9 @@ evaluateTerm cont handler env (Var n info) = do
       Just (VModRef mr) -> do
         modRefHash <- _mHash <$> getModule info (_mrModule mr)
         let nk = NTopLevel (_mrModule mr) modRefHash
-        evalCEK cont handler env (Var (Name dArg nk) info)
+        caller <- findCallingModule
+        let env' = maybe env (\m -> over ceReentrant (S.insert m) env) caller
+        evalCEK cont handler env' (Var (Name dArg nk) info)
       Just _ ->
         throwExecutionError info (DynNameIsNotModRef (_nName n))
       Nothing -> failInvariant info (InvariantInvalidBoundVariable (_nName n))
@@ -613,7 +615,12 @@ evalWithStackFrame
   -> EvalM e b i (EvalResult e b i)
 evalWithStackFrame info cont handler env mty sf body = do
   cont' <- pushStackFrame info cont mty sf
-  evalCEK cont' handler env body
+  let callingModule = _fqModule $ _sfName sf
+  reentrancyCheckDisabled <- isExecutionFlagSet FlagDisableReentrancyCheck
+  let env' = if S.notMember callingModule (_ceReentrant env) || reentrancyCheckDisabled
+             then env
+             else readOnlyEnv env
+  evalCEK cont' handler env' body
 
 -- | Push a stack frame into the stack, and check it for recursion
 pushStackFrame
@@ -1606,7 +1613,7 @@ eval
   -> EvalM e b i PactValue
 eval purity benv term = do
   ee <- viewEvalEnv id
-  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) mempty False)
   evalNormalForm cekEnv term >>= \case
     VError stack err i ->
       throwUserRecoverableError' i stack err
@@ -1629,7 +1636,7 @@ evalWithinCap info purity benv (CapToken qualName vs) term = do
   ee <- viewEvalEnv id
   (_, mh) <- getDefCapQN info qualName
   let ct = CapToken (qualNameToFqn qualName mh) vs
-  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) mempty False)
   evalCap (view termInfo term) Mt CEKNoHandler cekEnv ct PopCapInvoke NormalCapEval term
     >>= \case
     VError stack err i ->
@@ -1649,7 +1656,7 @@ interpretGuard
   -> EvalM e b i PactValue
 interpretGuard info bEnv g = do
   ee <- viewEvalEnv id
-  let cekEnv = CEKEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) False
+  let cekEnv = CEKEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) mempty False
   enforceGuard info Mt CEKNoHandler cekEnv g >>= \case
     VError stack err i ->
       throwUserRecoverableError' i stack err
@@ -1669,7 +1676,7 @@ evalResumePact
 evalResumePact info bEnv mdpe = do
   ee <- viewEvalEnv id
   let pdb = _eePactDb ee
-  let env = CEKEnv mempty pdb bEnv (_eeDefPactStep ee) False
+  let env = CEKEnv mempty pdb bEnv (_eeDefPactStep ee) mempty False
   resumePact info Mt CEKNoHandler env mdpe >>= \case
     VError stack err i ->
       throwUserRecoverableError' i stack err

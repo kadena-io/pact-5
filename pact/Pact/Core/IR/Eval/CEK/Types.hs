@@ -22,6 +22,7 @@ module Pact.Core.IR.Eval.CEK.Types
  , ceBuiltins
  , ceDefPactStep
  , ceInCap
+ , ceReentrant
  , EvalEnv(..)
  , NativeFunction
  , BuiltinEnv
@@ -142,13 +143,14 @@ data CEKEnv (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   , _cePactDb :: PactDb b i
   , _ceBuiltins :: BuiltinEnv e b i
   , _ceDefPactStep :: Maybe DefPactStep
+  , _ceReentrant :: Set ModuleName
   , _ceInCap :: Bool }
   deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (CEKEnv e b i)
 
 instance (Show i, Show b) => Show (CEKEnv e b i) where
-  show (CEKEnv e _ _ _ _) = show e
+  show (CEKEnv e _ _ _ _ _) = show e
 
 -- | List of builtins
 type BuiltinEnv (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
