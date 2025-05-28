@@ -1,10 +1,10 @@
 ## typecheck
 
-Use `typecheck` to run the Pact static type checker on a specified `module` name.
+Use `typecheck` to run the Pact static type checker on the `module` you specify.
 
 ### Basic syntax
 
-To run the static type checker on a specified `module` name, use the following syntax:
+To run the static type checker on the `module` specified, use the following syntax:
 
 ```pact
 (typecheck module)
@@ -21,7 +21,7 @@ Use the following argument when calling the `typecheck` function:
 ### Return value
 
 If type checking for the module is successful, the `typecheck` function returns the unit value `()`. 
-If type checking fails, the function returns an error.
+If type checking fails, the `typecheck` function throws an error and ends execution.
 
 ### Examples
 
