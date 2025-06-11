@@ -28,8 +28,11 @@ import Control.Lens
 import Control.Monad.IO.Class
 import Control.Exception.Safe
 import Control.Monad.Except
+import Control.Monad (when)
 import Control.Monad.Trans(lift)
 import System.Console.Haskeline
+import System.FilePath
+import System.Directory (createDirectoryIfMissing)
 import Data.IORef
 import Data.Text(Text)
 import qualified Data.Text as T
@@ -44,19 +47,27 @@ import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
 import Pact.Core.Info
 import Pact.Core.Errors
+import Pact.Core.Coverage (showReport)
 
-execScript :: Bool -> FilePath -> IO (Either (PactError FileLocSpanInfo) [ReplCompileValue], ReplState ReplCoreBuiltin)
-execScript traceEnabled f = do
+execScript :: Bool -> Bool -> FilePath -> IO (Either (PactError FileLocSpanInfo) [ReplCompileValue], ReplState ReplCoreBuiltin)
+execScript traceEnabled coverageEnabled f = do
   pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   ee <- defaultEvalEnv pdb replBuiltinMap
-  let replState = mkReplState' ee printLogger & replTraceLine .~ traceLogger
+  let replState =  mkReplState' ee printLogger & replTraceLine .~ traceLogger & replCoverage . covEnabled .~ coverageEnabled
   ref <- newIORef replState
   v <- evalReplM ref $ loadFile interpretEvalDirect f True
   state <- readIORef ref
+  writeCoverageReport state
   pure (v, state)
   where
   logWithTrace traceType (FileLocSpanInfo file info) v =
     liftIO $ T.putStrLn $ T.concat [T.pack file, ":", renderCompactText info, ":", traceType, ": ", v]
+  writeCoverageReport rstate = when coverageEnabled $ do
+    let dir = takeDirectory f
+    let covFile = dir </> "coverage/lcov.info"
+    createDirectoryIfMissing True (takeDirectory covFile)
+    T.writeFile covFile (showReport (rstate ^. replCoverage . covReport))
+
   printLogger :: FileLocSpanInfo -> Text -> EvalM e b i ()
   printLogger floc v
     | traceEnabled = logWithTrace "Print" floc v

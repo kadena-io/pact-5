@@ -37,6 +37,7 @@ import System.FilePath.Posix
 
 
 import qualified Data.Map.Strict as M
+import qualified Data.IntMap.Strict as IM
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -52,10 +53,12 @@ import Pact.Core.Environment
 import Pact.Core.Info
 import Pact.Core.Errors
 import Pact.Core.Interpreter
-import Pact.Core.Pretty hiding (pipe)
+import Pact.Core.Pretty hiding (pipe, line)
 import Pact.Core.Serialise
 import Pact.Core.PactValue
 import Pact.Core.NativeShadowing
+import Pact.Core.Coverage.Types
+import Pact.Core.Coverage
 
 
 import Pact.Core.IR.Eval.Runtime
@@ -70,6 +73,7 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.IR.Eval.CEK.Evaluator as CEK
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.IR.Eval.Direct.ReplBuiltin as Direct
+import Data.Maybe (catMaybes)
 
 type ReplInterpreter = Interpreter ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 
@@ -103,6 +107,7 @@ mkReplState ee printfn loadFn =
     , _replLoad = loadFn
     , _replLoadedFiles = mempty
     , _replTestResults = []
+    , _replCoverage = ReplCoverage False (LcovReport mempty)
     }
   where
   defaultSrc = SourceCode "(interactive)" mempty
@@ -126,6 +131,7 @@ mkReplState' ee printfn =
     , _replLoad = \f reset -> void (loadFile interpretEvalDirect f reset)
     , _replLoadedFiles = mempty
     , _replTestResults = []
+    , _replCoverage = ReplCoverage False (LcovReport mempty)
     }
   where
   defaultSrc = SourceCode "(interactive)" mempty
@@ -224,6 +230,7 @@ loadFile interpreter txt reset  = do
 
   -- When the repl enters another file and finishes,
   -- all other code executed must have a valid reference to the "current" source
+  checkOrCreateFileReport txt
   oldSrc <- useReplState replCurrSource
   pactdb <- liftIO (mockPactDb serialisePact_repl_fileLocSpanInfo)
   -- Similarly, the eval env is preseved
@@ -271,7 +278,6 @@ checkParsedShadows fp = do
           let shadowOutput = vsep $ fmap (\s@(Shadows _ _ i) -> pretty i <> ":" <+> pretty s) shadows
           T.putStrLn $ renderCompactText' shadowOutput
 
-
 liftShadowsReplM :: ShadowsM b FileLocSpanInfo a -> ReplM b a
 liftShadowsReplM act = do
   natives <- viewEvalEnv eeNatives
@@ -284,6 +290,54 @@ liftShadowsReplM act = do
   where
   printShadow s@(Shadows _ _ i) = replPrintLn i s
   toShadowingError (Shadows _ arg i) = PEDesugarError (InvalidNativeShadowing arg) i
+
+coverTopLevel :: TopLevel name ty b1 FileLocSpanInfo -> EvalM ReplRuntime b2 FileLocSpanInfo ()
+coverTopLevel = \case
+  TLModule mdl -> coverModule mdl
+  _ -> pure ()
+
+coverModule :: Module name ty b1 FileLocSpanInfo -> EvalM ReplRuntime b2 FileLocSpanInfo ()
+coverModule mdl = do
+  let (FileLocSpanInfo file _) = _mInfo mdl
+  ReplCoverage enabled _ <- useReplState replCoverage
+  when enabled $ do
+    fqns <- catMaybes <$> traverse coverDefs (_mDefs mdl)
+    let functionCovers = M.fromList
+          [ (fqn, FunctionReport fqn line 0)
+          | (fqn, FileLocSpanInfo _ si) <- fqns
+          , let line = _liStartLine si]
+    replCoverage .covReport . lcovReport %== M.adjust (over fileReportFunctions (M.union functionCovers)) file
+  where
+  createLineTick (FileLocSpanInfo file info) = do
+    let line = _liStartLine info
+        updateLine f = f & fileReportLines %~ IM.insertWith mergeLineReport line (LineReport line 0)
+    replCoverage . covReport . lcovReport %== M.adjust updateLine file
+  createBranchTick (FileLocSpanInfo file info) = do
+    let line = _liStartLine info
+        updateBranch f = f & fileReportBranches %~ IM.insertWith mergeBranchReport line (BranchReport line 0 0)
+    replCoverage . covReport . lcovReport %== M.adjust updateBranch file
+  coverTerms t = forM_ (universe t) $ \case
+    BuiltinForm (CIf _ _ _) i -> do
+      createLineTick i
+      createBranchTick i
+    c -> createLineTick (view termInfo c)
+  coverDefs = \case
+    DSchema{} -> pure Nothing
+    DTable{} -> pure Nothing
+    DConst{} -> pure Nothing
+    defn@(Dfun dfn) -> do
+      let fqn = FullyQualifiedName (_mName mdl) (defName defn) (_mHash mdl)
+      coverTerms (_dfunTerm dfn)
+      pure $ Just (fqn, defInfo defn)
+    defn@(DCap dfn) -> do
+      let fqn = FullyQualifiedName (_mName mdl) (defName defn) (_mHash mdl)
+      coverTerms (_dcapTerm dfn)
+      pure $ Just (fqn, defInfo defn)
+    defn@(DPact dp) -> do
+      let fqn = FullyQualifiedName (_mName mdl) (defName defn) (_mHash mdl)
+      (traverse_.traverseDefPactStep) (\c -> c <$ coverTerms c) (_dpSteps dp)
+      pure $ Just (fqn, defInfo defn)
+
 
 interpretReplProgram
   :: ReplInterpreter
@@ -336,6 +390,7 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
               Nothing ->
                 throwExecutionError varI $ EvalError "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
+            coverTopLevel ds
             let sliced = sliceCode toplevel source (view spanInfo tlInfo)
             v <- RCompileValue <$> evalTopLevel interpreter (RawCode sliced) ds deps
             emitWarnings

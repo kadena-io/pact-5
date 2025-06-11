@@ -76,6 +76,7 @@ module Pact.Core.Environment.Types
  , replLoad
  , replLoadedFiles
  , replLogType
+ , replCoverage
  , ReplM
  , ReplOutput(..)
  , ReplDebugFlag(..)
@@ -90,6 +91,9 @@ module Pact.Core.Environment.Types
  , ReplTestStatus(..)
  , _ReplTestFailed
  , _ReplTestPassed
+ , ReplCoverage(..)
+ , covEnabled
+ , covReport
  ) where
 
 
@@ -127,6 +131,7 @@ import Pact.Core.StackFrame
 import Pact.Core.SPV
 import Pact.Core.Info
 import Pact.Core.Pretty
+import Pact.Core.Coverage.Types
 
 data SourceCode
   = SourceCode
@@ -385,8 +390,15 @@ data ReplOutput where
   ReplStdOut :: ReplOutput
   ReplLogOut :: IORef [(Text, FileLocSpanInfo)] -> ReplOutput
 
--- | The type of a
+-- | The type of our "printing" actions
 type OutputWithLoc b = FileLocSpanInfo -> Text -> EvalM 'ReplRuntime b FileLocSpanInfo ()
+
+-- | Our data type for coverage information in the REPL
+data ReplCoverage
+  = ReplCoverage
+  { _covEnabled :: Bool
+  , _covReport :: LcovReport
+  }
 
 -- | Passed in repl environment
 --   TODO: move to Repl.Types
@@ -420,6 +432,7 @@ data ReplState b
   -- ^ The files currently loaded in the repl
   , _replTestResults :: [ReplTestResult]
   -- ^ The current repl tests results
+  , _replCoverage :: ReplCoverage
   }
 
 data RuntimeMode
@@ -468,3 +481,4 @@ runEvalMResult env st (EvalM action) =
 
 makeLenses ''ReplState
 makePrisms ''ReplTestStatus
+makeLenses ''ReplCoverage

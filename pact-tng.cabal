@@ -296,6 +296,9 @@ library
     -- Hyperlane
     Pact.Crypto.Hyperlane
 
+    -- Coverage
+    Pact.Core.Coverage.Types
+
   extra-libraries: mpfr
 
 library pact-repl
@@ -334,6 +337,8 @@ library pact-repl
     Pact.Core.Typed.Term
     Pact.Core.Typed.Type
     Pact.Core.Typed.Infer
+
+    Pact.Core.Coverage
 
   build-depends:
     , pact-tng

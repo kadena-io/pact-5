@@ -90,6 +90,7 @@ import Pact.Core.SizeOf
 
 import qualified Pact.Core.Principal as Pr
 import qualified Pact.Core.Trans.MPFR as MPFR
+import Pact.Core.Coverage (CoverageTick)
 
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
@@ -618,7 +619,7 @@ strToList info b _env = \case
   args -> argsError info b args
 
 
-zipList :: (IsBuiltin b) => NativeFunction e b i
+zipList :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 zipList info b _env = \case
   [VClosure clo, VList l, VList r] ->
     VList <$> V.zipWithM go l r
@@ -628,7 +629,7 @@ zipList info b _env = \case
       enforcePactValue info =<< applyLam info clo [VPactValue x, VPactValue y]
   args -> argsError info b args
 
-coreMap :: (IsBuiltin b) => NativeFunction e b i
+coreMap :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreMap info b _env = \case
   [VClosure clo, VList li] ->
     VList <$> traverse go li
@@ -638,7 +639,7 @@ coreMap info b _env = \case
       applyLam info clo [VPactValue x] >>= enforcePactValue info
   args -> argsError info b args
 
-coreFilter :: (IsBuiltin b) => NativeFunction e b i
+coreFilter :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreFilter info b _env = \case
   [VClosure clo, VList li] ->
     VList <$> V.filterM go li
@@ -648,7 +649,7 @@ coreFilter info b _env = \case
       applyLam info clo [VPactValue e] >>= enforceBool info
   args -> argsError info b args
 
-coreFold :: (IsBuiltin b) => NativeFunction e b i
+coreFold :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreFold info b _env = \case
   [VClosure clo, VPactValue initElem, VList li] ->
     VPactValue <$> foldlM go initElem li
@@ -747,7 +748,7 @@ enforceYield info y = case _yProvenance y of
     let p' = Provenance cid (_mHash m):map (Provenance cid) (S.toList $ _mBlessed m)
     unless (p `elem` p') $ throwExecutionError info (YieldProvenanceDoesNotMatch p p')
 
-coreResume :: (IsBuiltin b) => NativeFunction e b i
+coreResume :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreResume info b env = \case
   [VClosure clo] -> do
     -- Check the env, this is where we set it
@@ -797,7 +798,7 @@ coreB64Decode info b _env = \case
 
 
 -- | The implementation of `enforce-guard` native.
-coreEnforceGuard :: (IsBuiltin b) => NativeFunction e b i
+coreEnforceGuard :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreEnforceGuard info b env = \case
   [VGuard g] -> VBool <$> enforceGuard info env g
   [VString s] -> do
@@ -976,7 +977,7 @@ coreReadKeyset info b _env = \case
   args -> argsError info b args
 
 
-coreBind :: (IsBuiltin b) => NativeFunction e b i
+coreBind :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreBind info b _env = \case
   [v@VObject{}, VClosure clo] ->
     applyLam info clo [v] >>= enforcePactValue' info
@@ -997,7 +998,7 @@ createTable info b env = \case
     return (VString "TableCreated")
   args -> argsError info b args
 
-dbSelect :: (IsBuiltin b) => NativeFunction e b i
+dbSelect :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 dbSelect info b env = \case
   [VTable tv, VClosure clo] ->
     selectRead tv clo Nothing
@@ -1024,7 +1025,7 @@ dbSelect info b env = \case
 
 
 
-foldDb :: (IsBuiltin b) => NativeFunction e b i
+foldDb :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 foldDb info b env = \case
   [VTable tv, VClosure queryClo, VClosure consumer] -> do
     guardTable info tv GtSelect
@@ -1076,14 +1077,14 @@ dbRead info b env = \case
     return (VObject $ M.restrictKeys rdata (S.fromList li'))
   args -> argsError info b args
 
-dbWithRead :: (IsBuiltin b) => NativeFunction e b i
+dbWithRead :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 dbWithRead info b env = \case
   [VTable tv, VString rk, VClosure clo] -> do
     v <- dbRead info b env [VTable tv, VString rk]
     applyLam info clo [v] >>= enforcePactValue' info
   args -> argsError info b args
 
-dbWithDefaultRead :: (IsBuiltin b) => NativeFunction e b i
+dbWithDefaultRead :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 dbWithDefaultRead info b env = \case
   [VTable tv, VString rk, VObject defaultObj, VClosure clo] -> do
     guardTable info tv GtRead
@@ -1135,7 +1136,7 @@ dbKeys info b env = \case
   args -> argsError info b args
 
 defineKeySet'
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> T.Text
@@ -1164,7 +1165,7 @@ defineKeySet' info env ksname newKs  = do
             _ <- withMagicCap info (NamespaceOwnerCap (_namespaceName ns)) $ enforceGuard info env uGuard
             writeKs
 
-defineKeySet :: (IsBuiltin b) => NativeFunction e b i
+defineKeySet :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 defineKeySet info b env = \case
   [VString ksname, VGuard (GKeyset ks)] -> do
     enforceTopLevelOnly info b
@@ -1190,7 +1191,7 @@ requireCapability info b _env = \case
     requireCap info ct
   args -> argsError info b args
 
-composeCapability :: (IsBuiltin b) => NativeFunction e b i
+composeCapability :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 composeCapability info b env = \case
   [VCapToken ct] -> do
     enforceStackTopIsDefcap info b
@@ -1400,7 +1401,7 @@ integerToBS v = BS.pack $ reverse $ go v
          | otherwise = fromIntegral (i .&. 0xff):go (shift i (-8))
 
 
-coreAndQ :: (IsBuiltin b) => NativeFunction e b i
+coreAndQ :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreAndQ info b _env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
     c1 <- enforceBool info =<< applyLam info l [VPactValue v]
@@ -1408,7 +1409,7 @@ coreAndQ info b _env = \case
     else return (VBool False)
   args -> argsError info b args
 
-coreOrQ :: (IsBuiltin b) => NativeFunction e b i
+coreOrQ :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreOrQ info b _env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
     c1 <- enforceBool info =<< applyLam info l [VPactValue v]
@@ -1416,14 +1417,14 @@ coreOrQ info b _env = \case
     else applyLam info r [VPactValue v] >>= enforceBool' info
   args -> argsError info b args
 
-coreNotQ :: (IsBuiltin b) => NativeFunction e b i
+coreNotQ :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreNotQ info b _env = \case
   [VClosure clo, VPactValue v] -> do
     c <- enforceBool info =<< applyLam info clo [VPactValue v]
     return (VBool (not c))
   args -> argsError info b args
 
-coreWhere :: (IsBuiltin b) => NativeFunction e b i
+coreWhere :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreWhere info b _env = \case
   [VString field, VClosure app, VObject o] -> do
     chargeGasArgs info (GObjOp (ObjOpLookup field (M.size o)))
@@ -1604,7 +1605,7 @@ dbDescribeKeySet info b env = \case
         throwExecutionError info (InvalidKeysetNameFormat s)
   args -> argsError info b args
 
-coreCompose :: (IsBuiltin b) => NativeFunction e b i
+coreCompose :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreCompose info b _env = \case
   [VClosure clo1, VClosure clo2, v] -> do
     v' <- enforcePactValue info =<< applyLam info clo1 [v]
@@ -1646,7 +1647,7 @@ coreValidatePrincipal info b _env = \case
   args -> argsError info b args
 
 
-coreCond :: (IsBuiltin b) => NativeFunction e b i
+coreCond :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreCond info b _env = \case
   [VClosure clo] ->
     applyLam info clo [] >>= enforcePactValue' info
@@ -1682,7 +1683,7 @@ coreNamespace info b env = \case
   args -> argsError info b args
 
 
-coreDefineNamespace :: (IsBuiltin b) => NativeFunction e b i
+coreDefineNamespace :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreDefineNamespace info b env = \case
   [VString n, VGuard usrG, VGuard adminG] -> do
     enforceTopLevelOnly info b
@@ -2004,7 +2005,7 @@ coreHyperlaneEncodeTokenMessage info b _env = \case
       return (VString encoded)
   args -> argsError info b args
 
-coreAcquireModuleAdmin :: (IsBuiltin b) => NativeFunction e b i
+coreAcquireModuleAdmin :: (IsBuiltin b, CoverageTick i e) => NativeFunction e b i
 coreAcquireModuleAdmin info b env = \case
   [VModRef m] -> do
     let msg = VString ("Module admin for module " <> renderModuleName (_mrModule m)  <> " acquired")
@@ -2056,11 +2057,11 @@ coreStaticRedeploy info b env = \case
 
 coreBuiltinEnv
   :: forall e i.
-  (SizeOf i) => BuiltinEnv e CoreBuiltin i
+  (SizeOf i, CoverageTick i e) => BuiltinEnv e CoreBuiltin i
 coreBuiltinEnv i b env = mkDirectBuiltinFn i b env (coreBuiltinRuntime b)
 
 coreBuiltinRuntime
-  :: (IsBuiltin b, SizeOf b, SizeOf i)
+  :: (IsBuiltin b, SizeOf b, SizeOf i, CoverageTick i e)
   => CoreBuiltin
   -> NativeFunction e b i
 coreBuiltinRuntime =

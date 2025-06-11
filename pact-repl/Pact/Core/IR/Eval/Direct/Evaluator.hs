@@ -83,6 +83,7 @@ import Pact.Core.IR.Eval.Direct.Types
 import Pact.Core.Gas
 import Pact.Core.StableEncoding
 import Pact.Core.SizeOf
+import Pact.Core.Coverage
 
 mkDefunClosure
   :: EvalDefun b i
@@ -118,7 +119,7 @@ envFromPurity PReadOnly = readOnlyEnv
 envFromPurity PSysOnly = sysOnlyEnv
 
 eval
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => Purity
   -> BuiltinEnv e b i
   -> EvalTerm b i
@@ -133,7 +134,7 @@ eval purity benv term = do
 
 evalWithinCap
   :: forall e b i
-  .  (IsBuiltin b)
+  .  (IsBuiltin b, CoverageTick i e)
   => i
   -> Purity
   -> BuiltinEnv e b i
@@ -152,7 +153,7 @@ evalWithinCap info purity benv (CapToken qualName vs) term = do
 
 interpretGuard
   :: forall e b i
-  .  (IsBuiltin b)
+  .  (IsBuiltin b, CoverageTick i e)
   => i
   -> BuiltinEnv e b i
   -> Guard QualifiedName PactValue
@@ -163,7 +164,7 @@ interpretGuard info bEnv g = do
   PBool <$> enforceGuard info eEnv g
 
 evalResumePact
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> BuiltinEnv e b i
   -> Maybe DefPactExec
@@ -178,162 +179,168 @@ evalResumePact info bEnv mdpe = do
       throwExecutionError info (EvalError "Evaluation did not reduce to a value")
 
 evaluate
-  :: IsBuiltin b
+  :: (IsBuiltin b, CoverageTick i e)
   => DirectEnv e b i
   -> EvalTerm b i
   -> EvalM e b i (EvalValue e b i)
-evaluate env = \case
-  Var n info -> do
-    case _nKind n of
-      NBound i -> do
-        case RAList.lookup (_ceLocal env) i of
-          Just v -> return v
+evaluate env expr = do
+  tickLine (view termInfo expr)
+  evaluate' expr
+  where
+  evaluate' = \case
+    Var n info -> do
+      case _nKind n of
+        NBound i -> do
+          case RAList.lookup (_ceLocal env) i of
+            Just v -> return v
+            Nothing -> failInvariant info (InvariantInvalidBoundVariable (_nName n))
+        -- Top level names are not closures, so we wipe the env
+        NTopLevel mname mh -> do
+          let fqn = FullyQualifiedName mname (_nName n) mh
+          lookupFqName fqn >>= \case
+            Just (Dfun d) -> do
+              dfunClo <- VDefClosure <$> mkDefunClosure d fqn env
+              return dfunClo
+            -- Todo: this should be GADT'd out
+            -- and defconsts should already be evaluated
+            Just (DConst d) -> case _dcTerm d of
+              -- Note: `TermConst` cannot and should not be `evalCEK`'d. This is an error
+              -- this can cause semantic divergences, due to things like provided data.
+              -- moreover defcosts are always evaluated in `SysOnly` mode.
+              TermConst _term ->
+                failInvariant info (InvariantDefConstNotEvaluated fqn)
+              EvaledConst v ->
+                return (VPactValue v)
+            Just (DPact d) -> do
+              let dpactClo = mkDefPactClosure info fqn d env
+              return dpactClo
+            Just (DTable d) ->
+              let (ResolvedTable sc) = _dtSchema d
+                  tn = TableName (_dtName d) mname
+                  tbl = VTable (TableValue tn mh sc)
+              in return tbl
+            Just (DCap d) -> do
+              let args = _argType <$> _dcapArgs d
+                  clo = CapTokenClosure fqn args (length args) info
+              return (VClosure (CT clo))
+            Just d ->
+              failInvariant info (InvariantInvalidDefKind (defKind mname d) "in var position")
+            Nothing ->
+              failInvariant info (InvariantUnboundFreeVariable fqn)
+        NModRef m ifs ->
+          return (VModRef (ModRef m (S.fromList ifs)))
+        NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
+          Just (VModRef mr) -> do
+            modRefHash <- _mHash <$> getModule info (_mrModule mr)
+            let nk = NTopLevel (_mrModule mr) modRefHash
+            evaluate env (Var (Name dArg nk) info)
+          Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
           Nothing -> failInvariant info (InvariantInvalidBoundVariable (_nName n))
-      -- Top level names are not closures, so we wipe the env
-      NTopLevel mname mh -> do
-        let fqn = FullyQualifiedName mname (_nName n) mh
-        lookupFqName fqn >>= \case
-          Just (Dfun d) -> do
-            dfunClo <- VDefClosure <$> mkDefunClosure d fqn env
-            return dfunClo
-          -- Todo: this should be GADT'd out
-          -- and defconsts should already be evaluated
-          Just (DConst d) -> case _dcTerm d of
-            -- Note: `TermConst` cannot and should not be `evalCEK`'d. This is an error
-            -- this can cause semantic divergences, due to things like provided data.
-            -- moreover defcosts are always evaluated in `SysOnly` mode.
-            TermConst _term ->
-              failInvariant info (InvariantDefConstNotEvaluated fqn)
-            EvaledConst v ->
-              return (VPactValue v)
-          Just (DPact d) -> do
-            let dpactClo = mkDefPactClosure info fqn d env
-            return dpactClo
-          Just (DTable d) ->
-            let (ResolvedTable sc) = _dtSchema d
-                tn = TableName (_dtName d) mname
-                tbl = VTable (TableValue tn mh sc)
-            in return tbl
-          Just (DCap d) -> do
-            let args = _argType <$> _dcapArgs d
-                clo = CapTokenClosure fqn args (length args) info
-            return (VClosure (CT clo))
-          Just d ->
-            failInvariant info (InvariantInvalidDefKind (defKind mname d) "in var position")
-          Nothing ->
-            failInvariant info (InvariantUnboundFreeVariable fqn)
-      NModRef m ifs ->
-        return (VModRef (ModRef m (S.fromList ifs)))
-      NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
-        Just (VModRef mr) -> do
-          modRefHash <- _mHash <$> getModule info (_mrModule mr)
-          let nk = NTopLevel (_mrModule mr) modRefHash
-          evaluate env (Var (Name dArg nk) info)
-        Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
-        Nothing -> failInvariant info (InvariantInvalidBoundVariable (_nName n))
-  Constant l _info -> do
-    return (VLiteral l)
-  App ufn uargs info -> do
-    fn <- enforceUserAppClosure info =<< evaluate env ufn
-    args <- traverse (evaluate env) uargs
-    applyLam info fn args
-  Sequence e1 e2 info -> do
-    v <- evaluate env e1
-    enforceSaturatedApp info v
-    evaluate env e2
-  Builtin b info -> do
-    let builtins = _ceBuiltins env
-    return (VNative (builtins info b env))
-  Nullary body info -> do
-    let clo = VLamClosure (LamClosure NullaryClosure 0 body Nothing env info)
-    pure clo
-  Let arg e1 e2 i -> do
-    e1val <- evaluate env e1
-    case e1val of
-      VPactValue pv -> maybeTCType i (_argType arg) pv
-      _ -> pure ()
-    let newEnv = RAList.cons e1val (_ceLocal env)
-    let env' = env {_ceLocal = newEnv }
-    evaluate env' e2
-  Lam args body info -> do
-      let clo = VLamClosure (LamClosure (ArgClosure args) (NE.length args) body Nothing env info)
-      return clo
-  BuiltinForm c info -> case c of
-    CAnd te te' -> do
-      b <- evaluate env te >>= enforceBool info
-      -- chargeGasArgs info (GAConstant constantWorkNodeGas)
-      if b then evaluate env te' >>= enforceBoolValue info
-      else pure (VBool False)
-    COr te te' -> do
-      b <- evaluate env te >>= enforceBool info
-      -- chargeGasArgs info (GAConstant constantWorkNodeGas)
-      if b then pure (VBool True)
-      else evaluate env te' >>= enforceBoolValue info
-    CIf bExpr ifExpr elseExpr -> do
-      b <- enforceBool info =<< evaluate env bExpr
-      -- chargeGasArgs info (GAConstant constantWorkNodeGas)
-      if b then evaluate env ifExpr
-      else evaluate env elseExpr
-    CEnforce cond str -> do
-      pact52Disabled <- isExecutionFlagSet FlagDisablePact52
-      let env' = if not pact52Disabled then readOnlyEnv env else sysOnlyEnv env
-      b <- enforceBool info =<< evaluate env' cond
-      -- chargeGasArgs info (GAConstant constantWorkNodeGas)
-      if b then return (VBool True)
-      else do
-        msg <- enforceString info =<< evaluate env str
+    Constant l _info -> do
+      return (VLiteral l)
+    App ufn uargs info -> do
+      fn <- enforceUserAppClosure info =<< evaluate env ufn
+      args <- traverse (evaluate env) uargs
+      applyLam info fn args
+    Sequence e1 e2 info -> do
+      v <- evaluate env e1
+      enforceSaturatedApp info v
+      evaluate env e2
+    Builtin b info -> do
+      let builtins = _ceBuiltins env
+      return (VNative (builtins info b env))
+    Nullary body info -> do
+      let clo = VLamClosure (LamClosure NullaryClosure 0 body Nothing env info)
+      pure clo
+    Let arg e1 e2 i -> do
+      e1val <- evaluate env e1
+      case e1val of
+        VPactValue pv -> maybeTCType i (_argType arg) pv
+        _ -> pure ()
+      let newEnv = RAList.cons e1val (_ceLocal env)
+      let env' = env {_ceLocal = newEnv }
+      evaluate env' e2
+    Lam args body info -> do
+        let clo = VLamClosure (LamClosure (ArgClosure args) (NE.length args) body Nothing env info)
+        return clo
+    BuiltinForm c info -> case c of
+      CAnd te te' -> do
+        b <- evaluate env te >>= enforceBool info
+        -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+        if b then evaluate env te' >>= enforceBoolValue info
+        else pure (VBool False)
+      COr te te' -> do
+        b <- evaluate env te >>= enforceBool info
+        -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+        if b then pure (VBool True)
+        else evaluate env te' >>= enforceBoolValue info
+      CIf bExpr ifExpr elseExpr -> do
+        b <- enforceBool info =<< evaluate env bExpr
+        -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+        let branchTick = if b then CIfBranch else CElseBranch
+        tickBranch branchTick info
+        if b then evaluate env ifExpr
+        else evaluate env elseExpr
+      CEnforce cond str -> do
+        pact52Disabled <- isExecutionFlagSet FlagDisablePact52
+        let env' = if not pact52Disabled then readOnlyEnv env else sysOnlyEnv env
+        b <- enforceBool info =<< evaluate env' cond
+        -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+        if b then return (VBool True)
+        else do
+          msg <- enforceString info =<< evaluate env str
+          throwUserRecoverableError info (UserEnforceError msg)
+      CWithCapability cap body -> do
+        enforceNotWithinDefcap info env "with-capability"
+        rawCap <- enforceCapToken info =<< evaluate env cap
+        let capModule = view (ctName . fqModule) rawCap
+        guardForModuleCall info capModule $ pure ()
+        evalCap info env rawCap PopCapInvoke NormalCapEval body
+      CCreateUserGuard term -> case term of
+        App (Var (Name n (NTopLevel mn mh)) _) uargs _ -> do
+          let fqn = FullyQualifiedName mn n mh
+          args <- traverse (evaluate env >=> enforcePactValue info) uargs
+          createUserGuard info fqn args
+        _ -> throwExecutionError info $ NativeExecutionError (NativeName "create-user-guard") $
+            "create-user-guard: expected function application of a top-level function"
+      CTry catchExpr tryExpr -> do
+        chargeTryNodeWork info
+        let env' = readOnlyEnv env
+        catchRecoverable (evaluate env' tryExpr) (\_ _ -> evaluate env catchExpr)
+      CPure e -> do
+        let env' = readOnlyEnv env
+        evaluate env' e
+      CError e -> do
+        msg <- enforceString info =<< evaluate env e
         throwUserRecoverableError info (UserEnforceError msg)
-    CWithCapability cap body -> do
-      enforceNotWithinDefcap info env "with-capability"
-      rawCap <- enforceCapToken info =<< evaluate env cap
-      let capModule = view (ctName . fqModule) rawCap
-      guardForModuleCall info capModule $ pure ()
-      evalCap info env rawCap PopCapInvoke NormalCapEval body
-    CCreateUserGuard term -> case term of
-      App (Var (Name n (NTopLevel mn mh)) _) uargs _ -> do
-        let fqn = FullyQualifiedName mn n mh
-        args <- traverse (evaluate env >=> enforcePactValue info) uargs
-        createUserGuard info fqn args
-      _ -> throwExecutionError info $ NativeExecutionError (NativeName "create-user-guard") $
-          "create-user-guard: expected function application of a top-level function"
-    CTry catchExpr tryExpr -> do
-      chargeTryNodeWork info
-      let env' = readOnlyEnv env
-      catchRecoverable (evaluate env' tryExpr) (\_ _ -> evaluate env catchExpr)
-    CPure e -> do
-      let env' = readOnlyEnv env
-      evaluate env' e
-    CError e -> do
-      msg <- enforceString info =<< evaluate env e
-      throwUserRecoverableError info (UserEnforceError msg)
-    CEnforceOne str (ListLit conds _) ->
-      go conds
+      CEnforceOne str (ListLit conds _) ->
+        go conds
+        where
+        go (x:xs) = do
+          cond <- catchRecoverable (enforceBool info =<< evaluate env x) (\_ _ -> pure False)
+          chargeUnconsWork info
+          if cond then return (VBool True)
+          else go xs
+        go [] = do
+          msg <- enforceString info =<< evaluate env str
+          throwUserRecoverableError info (UserEnforceError msg)
+      CEnforceOne _ _ ->
+        throwExecutionError info $ NativeExecutionError (NativeName "enforce-one") $
+              "enforce-one: expected a list of conditions"
+    ListLit ts info -> do
+      chargeGasArgs info (GConcat (ListConcat (GasListLength (length ts))))
+      args <- traverse (evaluate env >=> enforcePactValue info) ts
+      return (VList (V.fromList args))
+    ObjectLit o info -> do
+      chargeGasArgs info (GConcat (ObjConcat (length o)))
+      args <- traverse go o
+      return (VObject (M.fromList args))
       where
-      go (x:xs) = do
-        cond <- catchRecoverable (enforceBool info =<< evaluate env x) (\_ _ -> pure False)
-        chargeUnconsWork info
-        if cond then return (VBool True)
-        else go xs
-      go [] = do
-        msg <- enforceString info =<< evaluate env str
-        throwUserRecoverableError info (UserEnforceError msg)
-    CEnforceOne _ _ ->
-      throwExecutionError info $ NativeExecutionError (NativeName "enforce-one") $
-            "enforce-one: expected a list of conditions"
-  ListLit ts info -> do
-    chargeGasArgs info (GConcat (ListConcat (GasListLength (length ts))))
-    args <- traverse (evaluate env >=> enforcePactValue info) ts
-    return (VList (V.fromList args))
-  ObjectLit o info -> do
-    chargeGasArgs info (GConcat (ObjConcat (length o)))
-    args <- traverse go o
-    return (VObject (M.fromList args))
-    where
-    go (f, e) = do
-      v <- evaluate env e
-      (f,) <$> enforcePactValue info v
-  InlineValue v _ ->
-    return (VPactValue v)
+      go (f, e) = do
+        v <- evaluate env e
+        (f,) <$> enforcePactValue info v
+    InlineValue v _ ->
+      return (VPactValue v)
 
 -- | Our main workhorse for "Evaluate a capability, then do something else"
 -- `evalCap` handles
@@ -351,7 +358,7 @@ evaluate env = \case
 --   - If the cap is managed, install the cap (If possible) then evaluate the body, and if
 --     the cap is user managed, ensure that the manager function run after the cap body
 evalCap
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> FQCapToken
@@ -482,7 +489,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
     _ -> failInvariant info (InvariantInvalidManagedCapKind "expected automanaged, received user managed")
 
 evalWithCapBody
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> CapPopState
   -> Maybe (CapToken QualifiedName PactValue)
@@ -654,10 +661,11 @@ sysOnlyEnv e
     DUserTables _ -> dbOpDisallowed
     _ -> _pdbRead pdb dom k
 
-evalWithStackFrame :: i -> StackFrame i -> Maybe Type -> EvalM e b i (EvalValue e b i) -> EvalM e b i (EvalValue e b i)
+evalWithStackFrame :: CoverageTick i e => i -> StackFrame i -> Maybe Type -> EvalM e b i (EvalValue e b i) -> EvalM e b i (EvalValue e b i)
 evalWithStackFrame info sf mty act = do
   checkRecursion
   esStack %= (sf:)
+  tickFunctionStart (_sfName sf) (_sfInfo sf)
 #ifdef WITH_FUNCALL_TRACING
   timeEnter <- liftIO $ getTime ProcessCPUTime
   esTraceOutput %= (TraceFunctionEnter timeEnter sf info:)
@@ -686,7 +694,7 @@ evalWithStackFrame info sf mty act = do
 {-# INLINE evalWithStackFrame #-}
 
 applyLamUnsafe
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> CanApply e b i
   -> [EvalValue e b i]
@@ -694,7 +702,7 @@ applyLamUnsafe
 applyLamUnsafe = applyLam
 
 applyLam
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> CanApply e b i
   -> [EvalValue e b i]
@@ -840,7 +848,7 @@ applyLam i (DPC (DefPactClosure fqn argtys arity env _)) args
 ------------------------------------------------------
 
 enforceGuard
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> Guard QualifiedName PactValue
@@ -871,7 +879,7 @@ enforceGuard info env g = case g of
 -- checking whether `esCaps . csModuleAdmin` for the particular
 -- module is in scope
 acquireModuleAdmin
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> EvalModule b i
@@ -887,7 +895,7 @@ acquireModuleAdmin i env mdl = do
 
 
 acquireModuleAdminCapability
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> ModuleName
@@ -898,7 +906,7 @@ acquireModuleAdminCapability i env mname = do
 
 
 runUserGuard
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> UserGuard QualifiedName PactValue
@@ -934,7 +942,7 @@ enforceCapGuard info cg@(CapabilityGuard qn args mpid) = case mpid of
 
 -- Keyset Code
 isKeysetInSigs
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> KeySet
@@ -979,7 +987,7 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
           throwExecutionError info (InvalidCustomKeysetPredicate "expected native")
 
 isKeysetNameInSigs
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> KeySetName
@@ -1021,7 +1029,7 @@ requireCap info (CapToken fqn args) = do
   else throwUserRecoverableError info (CapabilityNotGranted qualCapToken)
 
 composeCap
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> FQCapToken
@@ -1089,7 +1097,7 @@ installCap info _env (CapToken fqn args) autonomous = do
 -- DefPacts
 ------------------------------------------------------
 initPact
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DefPactContinuation QualifiedName PactValue
   -> DirectEnv e b i
@@ -1119,7 +1127,7 @@ nestedPactsNotAdvanced resultState ps =
 {-# INLINE nestedPactsNotAdvanced #-}
 
 applyPact
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DefPactContinuation QualifiedName PactValue
   -> DefPactStep
@@ -1187,7 +1195,7 @@ applyPact i pc ps cenv nested = use esDefPactExec >>= \case
     (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))
 
 applyNestedPact
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DefPactContinuation QualifiedName PactValue
   -> DefPactStep
@@ -1262,7 +1270,7 @@ applyNestedPact i pc ps cenv = use esDefPactExec >>= \case
     (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))
 
 resumePact
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, CoverageTick i e)
   => i
   -> DirectEnv e b i
   -> Maybe DefPactExec
