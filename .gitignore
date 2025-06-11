@@ -28,7 +28,6 @@ public
 docs/ko/_build/
 docs/ja/_build/
 *.hie
-coverage
 .pact-history
 */.pact-history
 */.pc-history

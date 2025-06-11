@@ -34,6 +34,7 @@ import Pact.Core.Environment
 import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
+import Pact.Core.Coverage.Types(LcovReport(..))
 import Pact.Core.Pretty (renderText)
 import System.IO (stderr)
 import qualified Data.Text.IO as T
@@ -260,6 +261,7 @@ setupAndProcessFile nuri content = do
           , _replTraceLine = const $ const $ pure ()
           , _replPrintLine = const $ const $ pure ()
           , _replTestResults = []
+          , _replCoverage = ReplCoverage False (LcovReport mempty)
           }
   stateRef <- newIORef rstate
   res <- evalReplM stateRef (processFile Repl.interpretEvalBigStep nuri src)

@@ -34,6 +34,7 @@ data OReplLoadFile
   = OReplLoadFile
   { _oFindScript :: Bool
   , _oDebug :: Bool
+  , _oCoverage :: Bool
   , _oFile :: String
   } deriving (Eq, Show)
 
@@ -76,8 +77,8 @@ loadFlag = fmap OLoad $
         O.help "For .pact files, attempts to locate a .repl file to execute.")
     <*> O.flag False True
         (O.short 't' <> O.long "trace" <> O.help "Show trace output")
-    -- <*> O.flag False True
-    --     (O.short 'c' <> O.long "coverage" <> O.help "Generate coverage report coverage/lcov.info")
+    <*> O.flag False True
+        (O.short 'c' <> O.long "coverage" <> O.help "Generate coverage report coverage/lcov.info")
     <*> O.argument O.str
       (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")
 
@@ -85,7 +86,7 @@ checkNativeShadowingFlag :: O.Parser ReplOpts
 checkNativeShadowingFlag =
   OCheckNativeShadowing
     <$> O.strOption(O.metavar "FILE" <> O.long "check-shadowing" <> O.help "Run a native shadowing check over a particular .pact or .repl file")
- 
+
 argParser :: O.ParserInfo (Maybe ReplOpts)
 argParser = O.info (O.helper <*> replOpts)
             (O.fullDesc <> O.header "The Pact Smart Contract Language Interpreter")
@@ -124,19 +125,19 @@ main = O.execParser argParser >>= \case
     OApiReq cf l -> apiReq cf l
     OSignCmd kfs -> BS8.putStrLn =<< signCmd kfs =<< fmap (T.encodeUtf8 . T.strip) T.getContents
     OGenKey -> genKeys
-    OLoad (OReplLoadFile findScript dbg fp)
+    OLoad (OReplLoadFile findScript dbg coverage fp)
       | isPactFile fp -> do
         script <- if findScript then locatePactReplScript fp else return Nothing
         case script of
-          Just s -> runScript s dbg
-          Nothing -> runScript fp dbg
-      | otherwise -> runScript fp dbg
+          Just s -> runScript s dbg coverage
+          Nothing -> runScript fp dbg coverage
+      | otherwise -> runScript fp dbg coverage
     OServer configPath -> Y.decodeFileEither configPath >>= \case
       Left perr -> putStrLn $ Y.prettyPrintParseException perr
       Right config -> runServer config noSPVSupport
     OCheckNativeShadowing fp -> checkParsedShadows fp
   where
-    runScript f dolog = execScript dolog f >>= \case
+    runScript f dolog cov = execScript dolog cov f >>= \case
       (Left pe, state) -> do
         let renderedError = renderLocatedPactErrorFromState state pe
         exitFailureWithMessage ((T.unpack renderedError) <> "\nLoad failed")
