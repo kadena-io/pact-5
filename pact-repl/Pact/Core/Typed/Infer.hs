@@ -903,7 +903,7 @@ instance TypeOfBuiltin CoreBuiltin where
       schema = M.fromList
         [ (Field "recipient", TyGuard)
         , (Field "amount", TyDecimal)
-        , (Field "chaindId", TyString)
+        , (Field "chainId", TyString)
         ]
     CoreHyperlaneEncodeMessage ->
       pure $ NonGeneric (TyObject (RowConcrete hyperlaneTokenMsgSchema) :~> TyString)
@@ -3456,4 +3456,3 @@ renderTypecheckError = \case
   singleLocError i msg = do
     slice <- mkReplErrorLocSlice i
     pure $ renderCompactText' $ msg <> hardline <> pretty slice
-
