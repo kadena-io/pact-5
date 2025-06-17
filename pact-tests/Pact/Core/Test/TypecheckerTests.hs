@@ -641,7 +641,7 @@ expectedNativeTypes = M.fromList . go
       schema = M.fromList
         [ (Field "recipient", TyGuard)
         , (Field "amount", TyDecimal)
-        , (Field "chaindId", TyString)
+        , (Field "chainId", TyString)
         ]
     CoreHyperlaneEncodeMessage ->
       [ ("use-hetm", NotIndexed $ NonGeneric $ TyNullary TyString) ]
