@@ -288,8 +288,8 @@ forkedToSpecialForm :: (Monad (t (EvalM e b i)), MonadTrans t) => Text -> t (Eva
 forkedToSpecialForm f = do
   flags <- lift (viewEvalEnv eeFlags)
   case toSpecialForm f of
-    Just SFError | S.member FlagDisablePact52 flags -> pure Nothing
-    Just SFPure | S.member FlagDisablePact52 flags -> pure Nothing
+    Just SFError | S.member FlagDisablePact53 flags -> pure Nothing
+    Just SFPure | S.member FlagDisablePact53 flags -> pure Nothing
     v -> pure v
 {-# INLINE forkedToSpecialForm #-}
 
@@ -436,7 +436,7 @@ desugarLispTerm = \case
     hs' <- traverse desugarLispTerm hs
     body <- bindingBody hs'
     bndTrns <- (\c -> if c then bindToLet else bindToLetPostFork)
-      <$> lift (isExecutionFlagSet FlagDisablePact52)
+      <$> lift (isExecutionFlagSet FlagDisablePact53)
     let bodyLam b = Lam (pure (Arg objFreshText Nothing i)) b i
     pure $ bodyLam $ foldr bndTrns body fs
       where

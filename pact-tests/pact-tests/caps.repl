@@ -1106,7 +1106,7 @@
 (create-table tbl)
 (insert tbl "foo" { 'a: 1 })
 
-(env-exec-config ["DisablePact52"])
+(env-exec-config ["DisablePact53"])
 (expect-failure "Pact 5.2 disabled read only user guard fails"
   (test-user-guard 1))
 

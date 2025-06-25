@@ -1,3 +1,44 @@
+5.3
+---
+### Features
+- Pure and error special forms (#367)
+- Enforce and user guards as read-only instead of sys-only (#274)
+- Add read-only reentrancy guarding for all modref calls (#373)
+- Add code coverage to pact repl (#376)
+
+### Misc
+- Improved typechecker errors (#361)
+- Improved bidirectional inference on defuns, and fix the type of `with-default-read` to accept partial subschemas of the table's parent (#369)
+- do, print clarified examples doc (#372)
+- Expanded example for env-sigs docs (#358)
+- Fixed syntax typo in docs (#357)
+- Minor formatting tweaks for docs (#337)
+- Fix typo in typechecker (#377)
+- typecheck: Minor doc updates for consistency with other function documentation (#371)
+
+
+5.2
+---
+### Features
+- Static typechecker returns with the `typecheck` native (#350 )
+- Magic caps for authorization primitives (#355 )
+
+
+### Misc
+* Release pact 5.1 by @jmcardon in https://github.com/kadena-io/pact-5/pull/339
+* Minor formatting tweaks by @lsgunnlsgunn in https://github.com/kadena-io/pact-5/pull/337
+* Kill old functions by @lsgunnlsgunn in https://github.com/kadena-io/pact-5/pull/340
+* Fix ordering of writes broken by transitive deps PR by @jmcardon in https://github.com/kadena-io/pact-5/pull/346
+* Fix local in pact server by @jmcardon in https://github.com/kadena-io/pact-5/pull/335
+* Add _StableEncoding iso by @edmundnoble in https://github.com/kadena-io/pact-5/pull/352
+* Add new NFData instance for TxLog by @edmundnoble in https://github.com/kadena-io/pact-5/pull/351
+* Add _Gas prism by @edmundnoble in https://github.com/kadena-io/pact-5/pull/356
+* Forward compatbility for latest version of hashes by @larskuhtz in https://github.com/kadena-io/pact-5/pull/354
+* Add magic caps for auth natives, bump pact version by @jmcardon in https://github.com/kadena-io/pact-5/pull/355
+* fix env-exec-config emitting unknown flag warnings, bump pact version by @jmcardon in https://github.com/kadena-io/pact-5/pull/343
+* Static typechecker return for pact 5 by @jmcardon in https://github.com/kadena-io/pact-5/pull/350
+
+
 5.1
 ---
 ### Features
