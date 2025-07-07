@@ -11,6 +11,7 @@
 module Pact.Core.Lint where
 
 import Control.Lens
+import Control.Monad (void)
 import Control.Monad.Trans.RWS
 import Data.Map (Map)
 import Pact.Core.Builtin
@@ -20,12 +21,15 @@ import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Type
 
+type CoreModule = Module Name Type CoreBuiltin
 type CoreTerm = Term Name Type CoreBuiltin
+type CoreDef = Def Name Type CoreBuiltin
 
 data LintMessage
   = LintInsertCall SpanInfo
   | LintUpdateCall SpanInfo
   | LintWriteCall SpanInfo
+  | LintMissingCapability SpanInfo String
 
 newtype Grant = Grant
   { capName :: String
@@ -116,7 +120,7 @@ type Bindings = Map ParsedName
 -- jww (2025-05-09): Need to check the type of the variable
 lintTerm ::
   (Monad m, HasSpanInfo i) =>
-  Bindings (CoreTerm i) ->
+  Bindings (CoreDef i) ->
   CoreTerm i ->
   RWST (Scopes m (CoreTerm i)) [LintMessage] () m ()
 lintTerm _globals = go
@@ -136,15 +140,51 @@ lintTerm _globals = go
       App func args _ -> do
         mapM_ go args
         go func
-      BuiltinForm _bf _ ->
-        undefined
+      BuiltinForm bf _ -> do
+        -- Check if this is a database modification operation
+        case bf of
+          -- Look for specific database modification operations
+          DBWrite -> do
+            -- Check if we have an active capability granting write access
+            hasWriteGrant <- hasGrant $ Grant "write"
+            unless hasWriteGrant $ do
+              let pos = i ^. spanInfo
+              tell [LintMissingCapability pos "write"]
+          DBInsert -> do
+            -- Check if we have an active capability granting insert access
+            hasInsertGrant <- hasGrant $ Grant "insert"
+            unless hasInsertGrant $ do
+              let pos = i ^. spanInfo
+              tell [LintMissingCapability pos "insert"]
+          DBUpdate -> do
+            -- Check if we have an active capability granting update access
+            hasUpdateGrant <- hasGrant $ Grant "update"
+            unless hasUpdateGrant $ do
+              let pos = i ^. spanInfo
+              tell [LintMissingCapability pos "update"]
+          _ -> pure ()
       Builtin b i ->
         case b of
-          CoreInsert ->
+          CoreInsert -> do
+            -- Check if we have an active capability granting insert access
+            hasInsertGrant <- hasGrant $ Grant "insert"
+            unless hasInsertGrant $ do
+              let pos = i ^. spanInfo
+              tell [LintMissingCapability pos "insert"]
             tell [LintInsertCall pos]
-          CoreUpdate ->
+          CoreUpdate -> do
+            -- Check if we have an active capability granting update access
+            hasUpdateGrant <- hasGrant $ Grant "update"
+            unless hasUpdateGrant $ do
+              let pos = i ^. spanInfo
+              tell [LintMissingCapability pos "update"]
             tell [LintUpdateCall pos]
-          CoreWrite ->
+          CoreWrite -> do
+            -- Check if we have an active capability granting write access
+            hasWriteGrant <- hasGrant $ Grant "write"
+            unless hasWriteGrant $ do
+              let pos = i ^. spanInfo
+              tell [LintMissingCapability pos "write"]
             tell [LintWriteCall pos]
           _ ->
             pure ()
@@ -165,6 +205,26 @@ lintTerm _globals = go
         undefined -- mapM go obj
       InlineValue _v _ ->
         undefined
+
+lintModule ::
+  (Monad m, HasSpanInfo i) =>
+  CoreModule i ->
+  RWST (Scopes m (CoreTerm i)) [LintMessage] () m ()
+lintModule m = mapM_ (go (mapDefs (_mDefs m))) (_mDefs m)
+  where
+    go defs (Dfun d) = lintTerm defs (_dfunTerm d)
+    go defs (DCap c) = lintTerm defs (_dcapTerm c)
+    go defs (DPact d) = void $ traverse step (_dpSteps d)
+      where
+        step (Step t) = lintTerm defs t
+        step (StepWithRollback t r) = do
+          lintTerm defs t
+          lintTerm defs r
+        step _ = pure ()
+    go _ _ = pure ()
+
+    mapDefs :: [CoreDef i] -> Bindings (CoreDef i)
+    mapDefs _ = undefined
 
 -- Try t1 t2 _ ->
 --   go e t1 $ \t1' ->

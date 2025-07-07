@@ -53,7 +53,7 @@ getSize version value = do
   return v
 
 sizeOfSmallObject :: SizeOfVersion -> Bytes -> TestTree
-sizeOfSmallObject version expectation = testCase ("pactvalue-smallobject-" ++ show version) $ do
+sizeOfSmallObject version expectation = testCase ("pactvalue-smallobject-" ++ Prelude.show version) $ do
     Right size <- getSize version smallObject
     assertEqual "size should match expectation" expectation size
   where
