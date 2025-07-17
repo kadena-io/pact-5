@@ -60,7 +60,7 @@
 
       packages.default = packages.pact-binary;
 
-      inherit (flake) devShell;
+      inherit (flake) devShells;
 
       packages.check = pkgs.runCommand "check" {} ''
         echo ${mkCheck "pact" packages.default}
@@ -69,7 +69,7 @@
 
         echo ${mkCheck "pact-tests" packages.pact-tests}
 
-        echo ${mkCheck "devShell" devShell}
+        echo ${mkCheck "devShell" devShells.default}
         echo works > $out
       '';
 
