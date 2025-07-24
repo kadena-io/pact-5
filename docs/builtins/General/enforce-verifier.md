@@ -24,14 +24,66 @@ The `enforce-verifier` function returns a boolean value indicating whether the s
 
 ### Examples
 
-The following example demonstrates the `enforce-verifier` function:
+The following example demonstrates the use of a `signed_list` verifier plugin that verifies signatures against structured message data to ensure the integrity and authenticity of messages provided to the `mod` module in a smart contract.
 
 ```pact
-pact> (enforce-verifier 'COOLZK)
+(namespace "free")
+
+(module mod GOV
+  (defcap GOV () true)
+  (defcap K (msg:list dst-fin-id:string)
+    (enforce-verifier "signed_list")
+  )
+
+  (defun x ()
+    (with-capability 
+      (K [["issue","finp2p","citi:102:d0c3eb56-0fff-4670-adfd-ad291a4314c3",
+           "finId","02fd7923740a775c95ce17e9bb7239ff9096689f70db9263a7efb9a9ad08e9fed7","1"]]
+         "02fd7923740a775c95ce17e9bb7239ff9096689f70db9263a7efb9a9ad08e9fed7")
+      )
+      1)
+)
+```
+
+In this example, the capability K uses the `enforce-verifier` function with the `signed_list` verifier. 
+The arguments that are passed to the capability are then evaluated by the verifier to ensure the integrity and authenticity of the message.
+
+The following example illustrates using the enforce-verifier in the capability definition, then using the `env-verifiers` function in the Pact REPL to add the "COOLZK" and "HYPERCHAIN-BRIDGE" verifier plugins to the environment data.
+
+```pact
+(module accounts GOV 
+  (defcap GOV () true) 
+  (defcap USER_GUARD (user:string) 
+    (enforce-verifier "COOLZK"))
+  (defun create-user (user:string)
+    (with-capability USER_GUARD "rae")
+  )
+)
+(module bridge GOV 
+  (defcap GOV () true) 
+  (defcap MINT (coin:string amount:integer) 
+    (enforce-verifier "HYPERCHAIN_BRIDGE"))
+)
+(env-verifiers [{'name: "COOLZK", 'caps: [(accounts.USER_GUARD "my-account")]}, {'name: "HYPERCHAIN-BRIDGE", 'caps: [(bridge.MINT "mycoin" 20)]}])
+```
+
+In this example, the verifiers are loaded in the environment so that they are in scope for the `enforce-verifier` function:
+
+```pact
+enforce-verifier-test.repl:0:0-7:1:Trace: Loaded module accounts, hash NXmdjAMHjjJSh-JUwTlT0IsOwZiXg_ZytI8Q3B2Xz4o
+enforce-verifier-test.repl:8:0-12:1:Trace: Loaded module bridge, hash E2h3NLl5ePmKGvd8aNvFHyo-LONVsbxHXg8giuY3kuc
+enforce-verifier-test.repl:13:0-13:146:Trace: "Setting transaction verifiers/caps"
+Load successful
+```
+
+If the required verifier plugins are in scope, the `enforce-verifier` function returns `true`.
+If a verifier is not in scope, the function fails. 
+
+```pact
+pact> (enforce-verifier "COOLZK")
 <interactive>:0:0:Error: Verifier failure COOLZK: not in transaction
 ```
 
-In this example, `(enforce-verifier 'COOLZK)` is used to enforce that the verifier named 'COOLZK' is in scope. 
-If the verifier 'COOLZK' is in scope, the function returns `true`. 
-If the verifier is not in scope, the function fails. 
 The `enforce-verifier` function provides a way to ensure that a specific verifier is available for use within a Pact contract.
+
+For more information about including verifier plugins in environment data for testing, see [`env-verifiers`](/pact-5/repl/env-verifiers).
