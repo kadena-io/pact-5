@@ -48,7 +48,7 @@ The following example demonstrates the use of a `signed_list` verifier plugin th
 In this example, the capability K uses the `enforce-verifier` function with the `signed_list` verifier. 
 The arguments that are passed to the capability are then evaluated by the verifier to ensure the integrity and authenticity of the message.
 
-The following example illustrates using the enforce-verifier in the capability definition, then using the `env-verifiers` function in the Pact REPL to add the "COOLZK" and "HYPERCHAIN-BRIDGE" verifier plugins to the environment data.
+The following example illustrates using the `enforce-verifier` function in the capability definition, then using the `env-verifiers` function in the Pact REPL to add the "COOLZK" and "HYPERCHAIN-BRIDGE" verifier plugins to the environment data.
 
 ```pact
 (module accounts GOV 
