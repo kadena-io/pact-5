@@ -2,6 +2,10 @@
 
 Use `enforce-verifier` to enforce that a verifier plugin with the specified `verifier-name` is in scope.
 
+Note that verifier plugins aren't implemented as Pact code.
+Instead, implementing a verifier plugin requires changes to the Chainweb protocol.
+For information about the design and implementation of verifier plugins, see [KIP-0028: Pact Verifier Plugins](https://github.com/kadena-io/KIPs/blob/master/kip-0028.md).
+
 ### Basic syntax
 
 To enforce that a verifier is in scope, use the following syntax:
@@ -31,13 +35,13 @@ The following example demonstrates the use of a `signed_list` verifier plugin th
 
 (module mod GOV
   (defcap GOV () true)
-  (defcap K (msg:list dst-fin-id:string)
+  (defcap MSG-GUARD (msg:list dst-fin-id:string)
     (enforce-verifier "signed_list")
   )
 
-  (defun x ()
+  (defun inbox ()
     (with-capability 
-      (K [["issue","finp2p","citi:102:d0c3eb56-0fff-4670-adfd-ad291a4314c3",
+      (MSG-GUARD [["issue","finp2p","citi:102:d0c3eb56-0fff-4670-adfd-ad291a4314c3",
            "finId","02fd7923740a775c95ce17e9bb7239ff9096689f70db9263a7efb9a9ad08e9fed7","1"]]
          "02fd7923740a775c95ce17e9bb7239ff9096689f70db9263a7efb9a9ad08e9fed7")
       )
@@ -45,7 +49,7 @@ The following example demonstrates the use of a `signed_list` verifier plugin th
 )
 ```
 
-In this example, the capability K uses the `enforce-verifier` function with the `signed_list` verifier. 
+In this example, the capability MSG-GUARD uses the `enforce-verifier` function with the `signed_list` verifier plugin. 
 The arguments that are passed to the capability are then evaluated by the verifier to ensure the integrity and authenticity of the message.
 
 The following example illustrates using the `enforce-verifier` function in the capability definition, then using the `env-verifiers` function in the Pact REPL to add the "COOLZK" and "HYPERCHAIN-BRIDGE" verifier plugins to the environment data.
