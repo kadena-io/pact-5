@@ -51,6 +51,7 @@ The following example demonstrates the use of a `signed_list` verifier plugin th
 
 In this example, the capability MSG-GUARD uses the `enforce-verifier` function with the `signed_list` verifier plugin. 
 The arguments that are passed to the capability are then evaluated by the verifier to ensure the integrity and authenticity of the message.
+If verification passed to the plugin fails, the capability isn't granted and the transaction fails.
 
 The following example illustrates using the `enforce-verifier` function in the capability definition, then using the `env-verifiers` function in the Pact REPL to add the "COOLZK" and "HYPERCHAIN-BRIDGE" verifier plugins to the environment data.
 
