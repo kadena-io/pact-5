@@ -1,0 +1,24 @@
+
+# 2025-07-29 12:16:41.500450
++Extend the file pact-lint/Pact/Core/Lint.hs so that it also warns on database writes that happen when certain granted capabilities are in scope.
+
+# 2025-07-29 12:16:45.098769
++D
+
+# 2025-07-29 13:18:46.522381
++/add pact-lint/Pact/Core/Lint.hs
+
+# 2025-07-29 13:18:56.356108
++/add pact/Pact/Core/Capabilities.hs
+
+# 2025-07-29 13:18:59.559050
++/add pact/Pact/Core/Builtin.hs
+
+# 2025-07-29 13:19:03.860485
++/add pact/Pact/Core/Type.hs
+
+# 2025-07-29 13:19:10.830090
++/add pact/Pact/Core/IR/Eval/CEK/Types.hs
+
+# 2025-07-29 13:19:17.779338
++Try now, using this additional context.

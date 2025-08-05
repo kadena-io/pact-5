@@ -1,51 +1,67 @@
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-module Pact.Core.Lint where
+module Pact.Core.Lint
+  ( lintModule,
+    lintTerm,
+    LintMessage(..),
+    Scoped(..),
+    Scope(..),
+    Scopes(..),
+    emptyScopes,
+    withScopes,
+    pushScope,
+  )
+where
 
 import Control.Lens
-import Control.Monad (void)
-import Control.Monad.Trans.RWS
-import Data.Map (Map)
+import Control.Monad.Reader
+import Control.Monad.RWS
+import Data.Foldable
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.Text (Text)
+import qualified Data.Text as T
+
 import Pact.Core.Builtin
 import Pact.Core.IR.Term
-import Pact.Core.Info
+import Pact.Core.IR.Eval.CEK.Types
 import Pact.Core.Literal
 import Pact.Core.Names
-import Pact.Core.Type
-
-type CoreModule = Module Name Type CoreBuiltin
-type CoreTerm = Term Name Type CoreBuiltin
-type CoreDef = Def Name Type CoreBuiltin
+import Pact.Core.Pretty
+import Pact.Core.SpanInfo
 
 data LintMessage
-  = LintInsertCall SpanInfo
+  = LintMissingCapability SpanInfo Text
+  | LintInsertCall SpanInfo
   | LintUpdateCall SpanInfo
   | LintWriteCall SpanInfo
-  | LintMissingCapability SpanInfo String
-
-newtype Grant = Grant
-  { capName :: String
-  }
+  | LintDeleteCall SpanInfo
   deriving (Eq, Show)
 
-newtype Scope a = Scope
-  { -- | A list of all capabilities that have been granted within the lexical
-    --   scope. This does _not_ include capabilities that may have been
-    --   granted by another function which then called the function defined
-    --   within this scope. These would be "dynamic grants" that can only be
-    --   fully computed at run-time using symbolic evaluation.
-    capGrants :: [Grant]
-  }
-  -- \| A list of bindings, corresponding to the de Bruijn indices that refer
-  --   to them within the lexical scope.
+data Grant
+  = Grant Text
+  deriving (Eq, Show)
+
+-- | A scope represents the set of variables that are in scope at a given
+-- point in the program. This includes both lexical and dynamic scoping.
+data Scope a
+  = Scope [a]
+  -- ^ The set of variables that are in the lexical scope.
   -- , localBindings :: [a]
 
   deriving
@@ -162,6 +178,12 @@ lintTerm _globals = go
             unless hasUpdateGrant $ do
               let pos = i ^. spanInfo
               tell [LintMissingCapability pos "update"]
+          DBDelete -> do
+            -- Check if we have an active capability granting delete access
+            hasDeleteGrant <- hasGrant $ Grant "delete"
+            unless hasDeleteGrant $ do
+              let pos = i ^. spanInfo
+              tell [LintMissingCapability pos "delete"]
           _ -> pure ()
       Builtin b i ->
         case b of
@@ -186,6 +208,13 @@ lintTerm _globals = go
               let pos = i ^. spanInfo
               tell [LintMissingCapability pos "write"]
             tell [LintWriteCall pos]
+          CoreDelete -> do
+            -- Check if we have an active capability granting delete access
+            hasDeleteGrant <- hasGrant $ Grant "delete"
+            unless hasDeleteGrant $ do
+              let pos = i ^. spanInfo
+              tell [LintMissingCapability pos "delete"]
+            tell [LintDeleteCall pos]
           _ ->
             pure ()
         where
