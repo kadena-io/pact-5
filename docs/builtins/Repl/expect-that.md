@@ -36,7 +36,7 @@ pact> (expect-that "addition" (< 2) (+ 1 2))
 "Expect-that: success: addition"
 ```
 
-The following example demonstrates how to use the `expect-that` function to evaluate an expression that returns fails to return the expected result:
+The following example demonstrates how to use the `expect-that` function to evaluate an expression that fails to return the expected result:
 
 ```pact
 pact> (expect-that "addition" (> 2) (+ 1 2))
