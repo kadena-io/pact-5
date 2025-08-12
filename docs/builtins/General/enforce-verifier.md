@@ -8,7 +8,7 @@ For information about the design and implementation of verifier plugins, see [KI
 
 ### Basic syntax
 
-To enforce that a verifier is in scope, use the following syntax:
+To enforce that a specific verifier is in scope, use the following syntax:
 
 ```pact
 (enforce-verifier verifier-name)
