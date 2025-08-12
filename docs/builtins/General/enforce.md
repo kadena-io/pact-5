@@ -50,3 +50,10 @@ The expression is false
 ```
 
 Because the expression is false, the transaction fails with the error message specified.
+
+The following example demonstrates evaluating an expression that requires read access to a database table. 
+In this example, the `enforce` function retrieves `details` for a particular `account` variable in a table to determine if the account is unlocked:
+
+```pact
+(enforce (at ‘unlocked (details account)) “account is locked”)
+```
