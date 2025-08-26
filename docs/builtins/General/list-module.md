@@ -2,6 +2,8 @@
 
 Use `list-modules` to list the modules that are deployed in your current environment and available for loading.
 
+Note that the `list-modules` function is only supported for the `/local` endpoint in Chainweb.
+
 ### Basic syntax
 
 To list the modules deployed and available for loading, use the following syntax:

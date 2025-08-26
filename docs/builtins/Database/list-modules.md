@@ -2,7 +2,7 @@
 
 Use `list-modules` to get all of the modules deployed on a particular chain.
 
-Note: This function is only allowed in `/local` in chainweb.
+Note that the `list-modules` function is only supported for the `/local` endpoint in Chainweb.
 
 ### Basic syntax
 
