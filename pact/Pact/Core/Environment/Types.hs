@@ -183,6 +183,8 @@ data ExecutionFlag
   | FlagDisablePact52
   -- | Flag to disable features from pact 5.3
   | FlagDisablePact53
+  -- | Flag to disable features from pact 5.4
+  | FlagDisablePact54
   -- | Flag to enable modref read-only mode
   | FlagDisableReentrancyCheck
   deriving (Eq,Ord,Show,Enum,Bounded, Generic)
