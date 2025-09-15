@@ -1832,9 +1832,17 @@ zkPairingCheck info b _env = \case
     g1s <- maybe (argsError info b args) pure (traverse (preview _PObject >=> (toG1 . ObjectData)) p1s)
     g2s <- maybe (argsError info b args) pure (traverse (preview _PObject >=> (toG2 . ObjectData)) p2s)
     traverse_ (\p -> ensureOnCurve info p b1) g1s
-    traverse_ (\p -> ensureOnCurve info p b2) g2s
+    traverse_ checkMembershipG2 g2s
     let pairs = zip (V.toList g1s) (V.toList g2s)
     return $ VBool $ pairingCheck pairs
+    where
+    curveOrder :: Integer
+    curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+    checkMembershipG2 p = do
+      p54Disabled <- isExecutionFlagSet FlagDisablePact54
+      if p54Disabled then ensureOnCurve info p b2
+      else do
+        unless (isOnCurve p b2 && (multiply p curveOrder == CurveInf)) $ throwExecutionError info PointNotOnCurve
   args -> argsError info b args
 
 zkScalarMult :: (IsBuiltin b) => NativeFunction e b i
