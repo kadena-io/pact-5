@@ -1,5 +1,12 @@
 5.3
 ---
+### Misc
+- Add check for G2 membership in pairing-check, and test (#386)
+- Many documentation improvements (#385, #383, #381)
+
+
+5.3
+---
 ### Features
 - Pure and error special forms (#367)
 - Enforce and user guards as read-only instead of sys-only (#274)

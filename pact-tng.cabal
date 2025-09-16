@@ -1,6 +1,6 @@
 cabal-version:       3.8
 name:                pact-tng
-version:             5.3
+version:             5.4
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
