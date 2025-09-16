@@ -22,7 +22,7 @@ import Data.Version (Version(..))
 name :: String
 name = "pact_tng"
 version :: Version
-version = Version [5,3] []
+version = Version [5,4] []
 
 synopsis :: String
 synopsis = "Smart contract language library and REPL"
