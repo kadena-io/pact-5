@@ -1,43 +1,20 @@
 ## install-capability
 
-Use `install-capability` to specify and provision a managed capability. 
-Managed capabilities are defined in `defcap` declarations that include the `@managed` keyword. 
-The `@managed` keyword can be used two ways:
+Use `install-capability` to provision a specific, previously-defined capability as the context for performing contract operations.
+For example, the `install-capability` function is frequently used set the capability state with appropriate permissions before performing operations that involve an escrow type of account.
 
-- To specify a specific **resource** using a single parameter to be managed by a specific **management function**.
-- To specify a restricted permission for an operation that can only be performed once.
+You should note that you should only specify managed capabilities when you call the `install-capability` function.
+Managed capabilities rely on management functions or one-time-use rules to set limits on how the capability is used.
 
-The `install-capability` function is most commonly used to perform contract operations that are not called directly by contract users.
-For example, the `install-capability` function is frequently used for operations involving an escrow type of account to grant the permissions required to perform restricted operations.
+After a capability is installed, the permissions associated with the specified capability are available but the capability must still be brought into scope using the `with-capability` function.
 
-After a capability is installed, it must be brought into scope using the `with-capability` function.
-When the installed managed capability is brought into scope, its management function is invoked to validate the request.
-
-The management function takes the type of the managed parameter, executes the logic required to validate the requested capability or perform the managed operation, and returns the new managed value that results from the request.
-
-The type signature for the management function is `managed:<type> requested:<type> -> <type>`, where `<type>` indicates the type of the managed parameter. 
-For example, assume you define a managed capability as: 
-
-```pact
-(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)
-```
-
-The management function for this capability would be:
-
-```pact
-(defun FOO-mgr:integer (managed:integer requested:integer) ...)
-``` 
-
-Any capability that has static unmanaged parameters will invoke the management function with the current managed value and that of the requested capability. 
-The function should perform whatever logic, presumably linear, to validate the request, and return the new managed value representing the `balance` of the request.
-
-Note that signatures scoped to a managed capability cause the capability to be automatically provisioned in a manner similar to how capabilities are installed with this function.
+For more information about defining and using managed capabilities, management functions, and the `with-capability` function, see [Managed capabilities](/smart-contracts/capabilities#managed-capabilities).
 
 By convention, capabilities are defined using all uppercase letters.
 
 ### Basic syntax
 
-To specify and provision a managed capability, use the following syntax:
+To provision a specific managed capability, use the following syntax:
 
 ```pact
 (install-capability CAPABILITY)
@@ -49,7 +26,7 @@ Use the following argument to specify the capability you want to install using t
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `CAPABILITY` | any | Specifies the capability to be installed. |
+| `CAPABILITY` | any | Specifies the name of the capability to be installed. |
 
 ### Return value
 
