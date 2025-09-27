@@ -1,5 +1,4 @@
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -198,7 +197,6 @@ import Control.Lens hiding (ix)
 import Control.Applicative
 import Data.Proxy
 import Data.Text(Text)
-import Data.Typeable(Typeable)
 import Data.Set(Set)
 import Data.List(intersperse)
 import Data.Default
@@ -975,7 +973,7 @@ data DbOpError
   | NotInTx Text
   | OpDisallowed
   | MultipleRowsReturnedFromSingleWrite
-  deriving (Show, Eq, Typeable, Generic)
+  deriving (Show, Eq, Generic)
 
 instance NFData DbOpError
 
@@ -1022,7 +1020,7 @@ data UserRecoverableError
   | VerifierFailure VerifierName Text
   -- ^ Verifier failure
   | CapabilityGuardNotAcquired (CapabilityGuard QualifiedName PactValue)
-  deriving (Show, Eq, Generic, Typeable)
+  deriving (Show, Eq, Generic)
 
 instance NFData UserRecoverableError
 

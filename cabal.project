@@ -52,5 +52,6 @@ allow-newer: servant-client-core:*
 allow-newer: servant-client:*
 allow-newer: servant:*
 allow-newer: tasty-wai:*
+allow-newer: *:hashable
 
 tests: True

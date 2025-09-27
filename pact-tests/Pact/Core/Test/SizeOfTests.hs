@@ -9,7 +9,7 @@ module Pact.Core.Test.SizeOfTests where
 import Data.Default
 import Control.Monad.IO.Class
 import qualified Data.Map as Map
-import Data.Text
+import qualified Data.Text as T
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -28,7 +28,7 @@ tests = testGroup "SizeOfTests" $
       Right size <- getSize SizeOfV0 (1 :: Int)
       assertEqual "size should be 5" 5 size
   , testCase "string" $ do
-      Right size <- getSize SizeOfV0 ("a" :: Text)
+      Right size <- getSize SizeOfV0 ("a" :: T.Text)
       -- Bytes of string + tag overhead
       assertEqual "size should be 5" 5 size
   , testCase "FieldKey" $ do
