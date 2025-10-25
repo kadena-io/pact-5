@@ -90,10 +90,12 @@ instance Show ProcessResult where
 
 data ProcessMsg
   = StoreMsg RequestKey (CommandResult Hash PactOnChainError) (MVar ProcessResult)
+  | StoreLocalMsg RequestKey (CommandResult Hash PactOnChainError) (MVar ProcessResult)
 
 instance Show ProcessMsg where
   show = \case
     StoreMsg rk _ _ -> show rk
+    StoreLocalMsg rk _ _ -> show rk
 
 -- | Runtime environment for a Pact server.
 data ServerRuntime
@@ -210,13 +212,17 @@ runServer (Config port persistDir logDir _verbose _gl) spv = do
 
 processMsg :: ServerRuntime -> IO ()
 processMsg env = do
-  el <- readChan (_srvChan env)
-  case el of
+  sm <- readChan (_srvChan env)
+  case sm of
     StoreMsg rk cmd result -> _histDbRead (_srHistoryDb env) rk >>= \case
       Nothing -> _histDbInsert (_srHistoryDb env) rk cmd >>= \case
-        Right _ -> putMVar result PESuccess
-        Left e -> putMVar result (PEUnknownException e)
+                 Right _ -> putMVar result PESuccess
+                 Left e -> putMVar result (PEUnknownException e)
       Just _ -> putMVar result PEExistingRequestKey
+    StoreLocalMsg rk _cmd result -> _histDbRead (_srHistoryDb env) rk >>= \case
+      Nothing -> putMVar result PESuccess
+      Just _ -> putMVar result PEExistingRequestKey
+
 
 
 runServer_ :: ServerRuntime -> Port -> Maybe FilePath -> IO ()
@@ -368,7 +374,7 @@ localHandler env (LocalRequest cmd) = do
   res <- liftIO $ try $! do
     result <- computeResultAndUpdateState env Local requestKey cmd
     storeResult <- newEmptyMVar
-    writeChan (_srvChan env) (StoreMsg requestKey result storeResult)
+    writeChan (_srvChan env) (StoreLocalMsg requestKey result storeResult)
     (result,) <$> readMVar storeResult
   case res of
     Right (result, PESuccess) -> pure $ LocalResponse result
